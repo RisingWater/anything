@@ -8,6 +8,7 @@
 #include <QDialog>
 #include <QList>
 #include "ScanThread.h"
+#include "FileResultTable.h"
 
 // 前向声明
 class QLineEdit;
@@ -20,6 +21,7 @@ class QStackedLayout;
 class QVBoxLayout;
 class QHBoxLayout;
 class QDialog;
+
 
 // 添加目录对话框
 class AddDirectoryDialog : public QDialog
@@ -58,7 +60,6 @@ private slots:
     void onScanFinished(bool success, const QString& message);
     void onSearchTextChanged(const QString& text);
     void performSearch();
-    void onResultItemDoubleClicked(QListWidgetItem* item);
     
 private:
     void setupUI();
@@ -72,7 +73,7 @@ private:
     
     // UI组件
     QLineEdit* search_input_;
-    QListWidget* result_list_;
+    FileResultTable* result_table_;
     QLabel* status_label_;
     QWidget* empty_widget_;
 };

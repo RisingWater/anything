@@ -111,7 +111,7 @@ FileSearchApp::~FileSearchApp() {
 
 void FileSearchApp::setupUI() {
     setWindowTitle("Anything");
-    setMinimumSize(800, 600);
+    setMinimumSize(1366, 768);
     
     // 中央部件
     auto central_widget = new QWidget(this);
@@ -129,14 +129,12 @@ void FileSearchApp::setupUI() {
     search_layout->addWidget(search_input_);
     
     // 搜索结果列表
-    result_list_ = new QListWidget(this);
-    connect(result_list_, &QListWidget::itemDoubleClicked, this, &FileSearchApp::onResultItemDoubleClicked);
+    result_table_ = new FileResultTable(this);
     
     // 主内容区域
     auto main_content = new QWidget(this);
     auto main_layout = new QVBoxLayout(main_content);
-    main_layout->addWidget(new QLabel("搜索结果:", main_content));
-    main_layout->addWidget(result_list_);
+    main_layout->addWidget(result_table_);
     
     // 状态栏
     status_label_ = new QLabel("就绪", this);
@@ -179,9 +177,9 @@ void FileSearchApp::checkScanObjects() {
             search_input_->setEnabled(false);
             addScanDirectory(homeDir);
         } else {
-            for (const auto& obj : scan_objects) {
-                startScan(QString::fromStdString(obj.directory_path));
-            }
+            //for (const auto& obj : scan_objects) {
+            //    startScan(QString::fromStdString(obj.directory_path));
+            //}
         }
         
         scan_obj.close();
@@ -260,14 +258,14 @@ void FileSearchApp::onSearchTextChanged(const QString& text) {
     if (text.length() >= 2) {
         QTimer::singleShot(300, this, &FileSearchApp::performSearch);
     } else if (text.isEmpty()) {
-        result_list_->clear();
+        result_table_->clear();
     }
 }
 
 void FileSearchApp::performSearch() {
     QString search_text = search_input_->text().trimmed();
     if (search_text.isEmpty()) {
-        result_list_->clear();
+        result_table_->clear();
         status_label_->setText("就绪");
         return;
     }
@@ -319,31 +317,7 @@ void FileSearchApp::performSearch() {
 }
 
 void FileSearchApp::displaySearchResults(const QList<QVariantMap>& results) {
-    result_list_->clear();
-    
-    for (const auto& result : results) {
-        QString file_type = result["is_directory"].toBool() ? "📁" : "📄";
-        QString file_name = result["file_name"].toString();
-        QString file_path = result["file_path"].toString();
-        
-        QString item_text = QString("%1 %2\n%3").arg(file_type).arg(file_name).arg(file_path);
-        
-        auto item = new QListWidgetItem(item_text);
-        item->setData(Qt::UserRole, file_path);
-        result_list_->addItem(item);
-    }
-}
-
-void FileSearchApp::onResultItemDoubleClicked(QListWidgetItem* item) {
-    QString file_path = item->data(Qt::UserRole).toString();
-    QFileInfo file_info(file_path);
-    QString dir_path = file_info.absolutePath();
-    
-    // 在文件管理器中打开所在目录
-    QUrl url = QUrl::fromLocalFile(dir_path);
-    if (!QDesktopServices::openUrl(url)) {
-        QMessageBox::warning(this, "错误", "无法打开目录");
-    }
+    result_table_->setSearchResults(results);
 }
 
 void FileSearchApp::onScanFinished(bool success, const QString& message) {

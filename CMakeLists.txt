@@ -30,6 +30,8 @@ set(SOURCES
     ScanObject.cpp
     FileScanner.cpp
     ScanThread.cpp
+    FileResultTable.cpp
+    FileContextMenu.cpp
     MainApp.cpp
 )
 
