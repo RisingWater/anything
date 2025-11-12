@@ -77,8 +77,9 @@ QString AddDirectoryDialog::getDirectory() const {
     return dir_input_->text().trimmed();
 }
 
-FileSearchApp::FileSearchApp(QWidget* parent) 
-    : QMainWindow(parent)
+FileSearchApp::FileSearchApp(QWidget* parent) :
+    QMainWindow(parent),
+    search_timer_(new QTimer(this))
 {
     // 获取home目录
     QString homeDir = QDir::homePath();
@@ -90,17 +91,26 @@ FileSearchApp::FileSearchApp(QWidget* parent)
         dir.mkpath(".");  // 递归创建目录
     }
     
-    //db_path_ = configPath + "/file_scanner.db";
-    db_path_ = "file_scanner.db";
+    db_path_ = configPath + "/file_scanner.db";
     
     qDebug() << "数据库路径:" << db_path_;
 
     setupUI();
     checkScanObjects();
     setupMenu();
+    setupTrayIcon();
+
+    search_timer_->setSingleShot(true);  // 单次触发
+    search_timer_->setInterval(500);     // 500毫秒延迟
+    connect(search_timer_, &QTimer::timeout, this, &FileSearchApp::performSearch);
 }
 
 FileSearchApp::~FileSearchApp() {
+    // 停止定时器
+    if (search_timer_->isActive()) {
+        search_timer_->stop();
+    }
+
     for (auto thread : scan_threads_) {
         if (thread->isRunning()) {
             thread->wait(5000);
@@ -112,6 +122,7 @@ FileSearchApp::~FileSearchApp() {
 void FileSearchApp::setupUI() {
     setWindowTitle("Anything");
     setMinimumSize(1366, 768);
+    setWindowIcon(QIcon(":/res/anything.png"));
     
     // 中央部件
     auto central_widget = new QWidget(this);
@@ -158,12 +169,6 @@ void FileSearchApp::setupMenu() {
     auto refresh_action = new QAction("刷新所有扫描", this);
     connect(refresh_action, &QAction::triggered, this, &FileSearchApp::refreshAllScans);
     file_menu->addAction(refresh_action);
-    
-    file_menu->addSeparator();
-    
-    auto exit_action = new QAction("退出", this);
-    connect(exit_action, &QAction::triggered, this, &QMainWindow::close);
-    file_menu->addAction(exit_action);
 }
 
 void FileSearchApp::checkScanObjects() {
@@ -177,9 +182,9 @@ void FileSearchApp::checkScanObjects() {
             search_input_->setEnabled(false);
             addScanDirectory(homeDir);
         } else {
-            //for (const auto& obj : scan_objects) {
-            //    startScan(QString::fromStdString(obj.directory_path));
-            //}
+            for (const auto& obj : scan_objects) {
+                startScan(QString::fromStdString(obj.directory_path));
+            }
         }
         
         scan_obj.close();
@@ -255,17 +260,26 @@ void FileSearchApp::updateScanProgress(const QString& message) {
 }
 
 void FileSearchApp::onSearchTextChanged(const QString& text) {
+    // 停止之前的定时器（如果正在运行）
+    if (search_timer_->isActive()) {
+        search_timer_->stop();
+    }
+    
     if (text.length() >= 2) {
-        QTimer::singleShot(300, this, &FileSearchApp::performSearch);
+        // 重新启动定时器，500毫秒后执行搜索
+        search_timer_->start();
     } else if (text.isEmpty()) {
-        result_table_->clear();
+        // 如果搜索框为空，立即清除结果
+        search_timer_->stop();
+        result_table_->clearResults();
+        status_label_->setText("就绪");
     }
 }
 
 void FileSearchApp::performSearch() {
     QString search_text = search_input_->text().trimmed();
     if (search_text.isEmpty()) {
-        result_table_->clear();
+        result_table_->clearResults();
         status_label_->setText("就绪");
         return;
     }
@@ -354,12 +368,66 @@ QString FileSearchApp::formatSize(qint64 size_bytes) const {
 
 void FileSearchApp::closeEvent(QCloseEvent* event) {
     // 等待所有扫描线程完成
-    for (auto thread : scan_threads_) {
-        if (thread->isRunning()) {
-            thread->wait(5000);
+    //for (auto thread : scan_threads_) {
+    //    if (thread->isRunning()) {
+    //        thread->wait(5000);
+    //    }
+    //}
+
+    hide();
+    event->accept();
+}
+
+void FileSearchApp::setupTrayIcon() {
+    // 创建系统托盘图标
+    trayIcon_ = new QSystemTrayIcon(this);
+    trayIcon_->setIcon(QIcon(":/res/anything.png")); // 设置程序图标
+    trayIcon_->setToolTip("Anything");
+    
+    // 创建托盘右键菜单
+    QMenu* trayMenu = new QMenu(this);
+    
+    // 显示/隐藏动作
+    QAction* showHideAction = new QAction("显示/隐藏", this);
+    connect(showHideAction, &QAction::triggered, this, [this]() {
+        if (isHidden()) {
+            show();
+            activateWindow();
+        } else {
+            hide();
+        }
+    });
+    
+    // 完全退出动作
+    QAction* quitAction = new QAction("完全退出", this);
+    connect(quitAction, &QAction::triggered, this, []() {
+        qApp->quit();
+    });
+    
+    // 添加到菜单
+    trayMenu->addAction(showHideAction);
+    trayMenu->addSeparator(); // 添加分隔线
+    trayMenu->addAction(quitAction);
+    
+    // 设置托盘菜单
+    trayIcon_->setContextMenu(trayMenu);
+    trayIcon_->show();
+    
+    // 连接托盘图标点击事件
+    connect(trayIcon_, &QSystemTrayIcon::activated, this, &FileSearchApp::onTrayIconActivated);
+}
+
+void FileSearchApp::onTrayIconActivated(QSystemTrayIcon::ActivationReason reason)
+{
+    if (reason == QSystemTrayIcon::DoubleClick)
+    {
+        if (isHidden()) {
+            show();
+            activateWindow();
+        } else {
+            hide();
         }
     }
-    event->accept();
 }
 
 // main函数
@@ -367,6 +435,8 @@ int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
     app.setApplicationName("文件搜索器");
     
+    QApplication::setQuitOnLastWindowClosed(false);
+
     FileSearchApp window;
     window.show();
     

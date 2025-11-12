@@ -17,6 +17,9 @@ void FileContextMenu::setupActions()
     // 打开
     openAction_ = addAction("打开", this, &FileContextMenu::openFile);
 
+    // 打开所在文件夹
+    openDirAction_ = addAction("打开所在文件夹", this, &FileContextMenu::openFilePath);
+
     // 复制完整路径
     copyPathAction_ = addAction("复制完整路径", this, &FileContextMenu::copyFullPath);        
 
@@ -52,6 +55,23 @@ void FileContextMenu::openFile()
         QDesktopServices::openUrl(QUrl::fromLocalFile(filePath_));
     } else {
         QMessageBox::warning(nullptr, "错误", "文件不存在");
+    }
+}
+
+void FileContextMenu::openFilePath()
+{
+    if (!fileInfo_.exists()) {
+        QMessageBox::warning(nullptr, "错误", "文件或文件夹不存在");
+        return;
+    }
+    
+    if (fileInfo_.isDir()) {
+        // 如果是文件夹，直接打开自己
+        QDesktopServices::openUrl(QUrl::fromLocalFile(filePath_));
+    } else {
+        // 如果是文件，打开所在文件夹
+        QString folderPath = fileInfo_.absolutePath();
+        QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
     }
 }
 

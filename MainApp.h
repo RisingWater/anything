@@ -7,8 +7,10 @@
 #include <QString>
 #include <QDialog>
 #include <QList>
+#include <QTimer>
 #include "ScanThread.h"
 #include "FileResultTable.h"
+#include <QSystemTrayIcon>
 
 // 前向声明
 class QLineEdit;
@@ -60,10 +62,12 @@ private slots:
     void onScanFinished(bool success, const QString& message);
     void onSearchTextChanged(const QString& text);
     void performSearch();
+    void onTrayIconActivated(QSystemTrayIcon::ActivationReason reason);
     
 private:
     void setupUI();
     void setupMenu();
+    void setupTrayIcon();
     void checkScanObjects();
     void displaySearchResults(const QList<QVariantMap>& results);
     QString formatSize(qint64 size_bytes) const;
@@ -76,6 +80,9 @@ private:
     FileResultTable* result_table_;
     QLabel* status_label_;
     QWidget* empty_widget_;
+    QTimer* search_timer_;
+
+    QSystemTrayIcon* trayIcon_;
 };
 
 #endif // MAINGUI_H

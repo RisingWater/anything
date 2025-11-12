@@ -26,6 +26,7 @@ signals:
 
 private slots:
     void openFile();
+    void openFilePath();
     void copyFullPath();
     void cutFile();
     void copyFile();
@@ -41,7 +42,7 @@ private:
     QFileInfo fileInfo_;
     
     QAction *openAction_;
-    QAction *openWithAction_;
+    QAction *openDirAction_;
     QAction *copyPathAction_;
     QAction *cutAction_;
     QAction *copyAction_;

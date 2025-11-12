@@ -101,6 +101,10 @@ void FileResultTable::setSearchResults(const QList<QVariantMap>& results)
 void FileResultTable::clearResults()
 {
     setRowCount(0);
+    // 确保表头保持正确
+    QStringList headers;
+    headers << "名称" << "路径" << "大小" << "修改时间";
+    setHorizontalHeaderLabels(headers);
 }
 
 void FileResultTable::onItemDoubleClicked(QTableWidgetItem *item)

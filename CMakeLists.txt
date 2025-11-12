@@ -21,6 +21,8 @@ endif()
 # 自动处理MOC
 set(CMAKE_AUTOMOC ON)
 
+QT5_ADD_RESOURCES(QRC_SRCS anything.qrc)
+
 # 包含当前目录
 include_directories(.)
 
@@ -33,6 +35,7 @@ set(SOURCES
     FileResultTable.cpp
     FileContextMenu.cpp
     MainApp.cpp
+    ${QRC_SRCS}
 )
 
 # 创建可执行文件
