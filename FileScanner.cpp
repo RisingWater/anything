@@ -5,7 +5,6 @@
 #include <fnmatch.h>
 #include <sys/stat.h>
 #include <ctime>
-#include <QDebug>
 
 const std::unordered_set<std::string> FileScanner::DEFAULT_EXCLUDED_DIRS = {
     ".git", ".svn", ".hg", ".idea", ".vscode", "__pycache__", "node_modules", ".repo"
@@ -23,10 +22,10 @@ FileScanner::FileScanner(const std::string& directory_path,
     file_db_ = std::make_unique<FileDB>(db_path_);
     scan_obj_ = std::make_unique<ScanObject>(db_path_);
     
-    qDebug() << "文件扫描器初始化: " << directory_path_.c_str();
-    qDebug() << "排除模式: ";
+    std::cout << "文件扫描器初始化: " << directory_path_ << std::endl;
+    std::cout << "排除模式: " << std::endl;
     for (const auto& pattern : excluded_patterns_) {
-        qDebug() << pattern.c_str() << " ";
+        std::cout << pattern.c_str() << " " << std::endl;
     }
 }
 
@@ -70,19 +69,19 @@ bool FileScanner::should_rescan()
     
     // 如果扫描对象不存在，需要扫描
     if (!scan_object) {
-        qDebug() << "扫描对象不存在，需要扫描: " << directory_path_.c_str();
+        std::cout << "扫描对象不存在，需要扫描: " << directory_path_ << std::endl;
         return true;
     }
     
     // 如果扫描对象存在但未激活，不需要扫描
     if (!scan_object->is_active) {
-        qDebug() << "扫描对象未激活，跳过扫描: " << directory_path_.c_str();
+        std::cout << "扫描对象未激活，跳过扫描: " << directory_path_ << std::endl;
         return false;
     }
     
     // 检查最后扫描时间
     if (scan_object->last_successful_scan_time.empty()) {
-        qDebug() << "从未扫描过，需要扫描: " << directory_path_.c_str();
+        std::cout << "从未扫描过，需要扫描: " << directory_path_ << std::endl;
         return true;
     }
 
@@ -102,7 +101,7 @@ bool FileScanner::scan_directory(bool db_operation) {
 
         total_file_count_ = 0;
         
-        qDebug() << "开始扫描目录:" << directory_path_.c_str();
+        std::cout << "开始扫描目录:" << directory_path_ << std::endl;
         double start_time = get_current_timestamp();
         
         // 确保扫描对象存在
@@ -124,18 +123,17 @@ bool FileScanner::scan_directory(bool db_operation) {
             file_db_->commit_transaction();
             scan_obj_->update_last_scan_time(directory_path_);
             double scan_duration = get_current_timestamp() - start_time;
-            qDebug() << "扫描完成:" << directory_path_.c_str() 
-                     << "耗时:" << scan_duration << "秒, 对象数量:" << total_file_count_;
+            std::cout << "扫描完成:" << directory_path_ << "耗时:" << scan_duration << "秒, 对象数量:" << total_file_count_ << std::endl;
         } else {
             file_db_->rollback_transaction();
-            qCritical() << "扫描失败:" << directory_path_.c_str();
+            std::cerr << "扫描失败:" << directory_path_ << std::endl;
         }
 
         return success;
         
     } catch (const std::exception& e) {
         file_db_->rollback_transaction();
-        qCritical() << "扫描目录异常:" << directory_path_.c_str() << "错误:" << e.what();
+        std::cerr << "扫描目录异常:" << directory_path_.c_str() << "错误:" << e.what() << std::endl;
         return false;
     }
 }
@@ -151,20 +149,20 @@ bool FileScanner::scan_directory_recursive(const std::string& current_dir, bool 
             std::string canonical_str = canonical_path.string();
             
             if (visited_paths.count(canonical_str)) {
-                qWarning() << "检测到符号链接循环，跳过目录:" << current_dir.c_str();
+                std::cerr << "检测到符号链接循环，跳过目录:" << current_dir.c_str();
                 return true; // 返回true继续扫描其他目录
             }
             
             visited_paths.insert(canonical_str);
             
         } catch (const std::filesystem::filesystem_error& e) {
-            qCritical() << "无法解析规范路径:" << current_dir.c_str() << "错误:" << e.what();
+            std::cerr << "无法解析规范路径:" << current_dir.c_str() << "错误:" << e.what();
             return false;
         }
         
         // 扫描当前目录的文件
         if (!scan_single_directory(current_dir, db_operation)) {
-            qWarning() << "当前目录扫描失败:" << current_dir.c_str();
+            std::cerr << "当前目录扫描失败:" << current_dir.c_str();
             // 不立即返回false，继续尝试其他目录
         }
         
@@ -176,7 +174,7 @@ bool FileScanner::scan_directory_recursive(const std::string& current_dir, bool 
                 if (entry.is_directory()) {
                     // 检查是否应该排除该目录
                     if (should_exclude_directory(entry.path())) {
-                        qDebug() << "跳过排除目录:" << entry.path().string().c_str();
+                        std::cout << "跳过排除目录:" << entry.path().string() << std::endl;
                         continue;
                     }
                     
@@ -185,28 +183,25 @@ bool FileScanner::scan_directory_recursive(const std::string& current_dir, bool 
                         try {
                             auto target_canonical = std::filesystem::canonical(entry.path());
                             if (visited_paths.count(target_canonical.string())) {
-                                qWarning() << "跳过符号链接循环:" << entry.path().string().c_str();
+                                std::cerr << "跳过符号链接循环:" << entry.path().string() << std::endl;
                                 continue;
                             }
                         } catch (const std::filesystem::filesystem_error& e) {
-                            qWarning() << "无法解析符号链接:" << entry.path().string().c_str() 
-                                      << "错误:" << e.what();
+                            std::cerr << "无法解析符号链接:" << entry.path().string() << "错误:" << e.what() << std::endl;
                             continue;
                         }
                     }
                     
                     if (!scan_directory_recursive(entry.path().string(), db_operation, visited_paths)) {
-                        qWarning() << "子目录扫描失败:" << entry.path().string().c_str();
+                        std::cerr << "子目录扫描失败:" << entry.path().string() << std::endl;
                         // 继续扫描其他目录，不立即返回
                     }
                 }
             } catch (const std::filesystem::filesystem_error& e) {
-                qWarning() << "无法访问目录条目:" << entry.path().string().c_str() 
-                          << "错误:" << e.what();
+                std::cerr << "无法访问目录条目:" << entry.path().string() << "错误:" << e.what() << std::endl;
                 continue;
             } catch (const std::exception& e) {
-                qWarning() << "处理目录条目异常:" << entry.path().string().c_str() 
-                          << "错误:" << e.what();
+                std::cerr << "处理目录条目异常:" << entry.path().string() << "错误:" << e.what() << std::endl;
                 continue;
             }
         }
@@ -214,11 +209,10 @@ bool FileScanner::scan_directory_recursive(const std::string& current_dir, bool 
         return true;
         
     } catch (const std::filesystem::filesystem_error& e) {
-        qCritical() << "文件系统错误扫描目录:" << current_dir.c_str() 
-                   << "错误:" << e.what() << "代码:" << e.code().value();
+        std::cerr << "文件系统错误扫描目录:" << current_dir << "错误:" << e.what() << "代码:" << e.code().value() << std::endl;;
         return false;
     } catch (const std::exception& e) {
-        qCritical() << "递归扫描异常:" << current_dir.c_str() << "错误:" << e.what();
+        std::cerr << "递归扫描异常:" << current_dir << "错误:" << e.what() << std::endl;;
         return false;
     }
 }
@@ -270,19 +264,17 @@ bool FileScanner::scan_single_directory(const std::string& directory_path, bool 
                 } else if (entry.is_directory()) {
                     // 检查是否应该排除该目录
                     if (should_exclude_directory(entry.path())) {
-                        qDebug() << "跳过排除目录:" << entry.path().string().c_str();
+                        std::cout << "跳过排除目录:" << entry.path().string() << std::endl;
                         continue;
                     }
                     // 目录会在递归中处理，这里只记录路径
                     actual_paths.insert(entry.path().string());
                 }
             } catch (const std::filesystem::filesystem_error& e) {
-                qWarning() << "无法访问文件条目:" << entry.path().string().c_str() 
-                          << "错误:" << e.what();
+                std::cerr << "无法访问文件条目:" << entry.path().string() << "错误:" << e.what() << std::endl;
                 continue;
             } catch (const std::exception& e) {
-                qWarning() << "处理文件条目异常:" << entry.path().string().c_str() 
-                          << "错误:" << e.what();
+                std::cerr << "处理文件条目异常:" << entry.path().string() << "错误:" << e.what() << std::endl;
                 continue;
             }
         }
@@ -302,17 +294,16 @@ bool FileScanner::scan_single_directory(const std::string& directory_path, bool 
                 }
             }
             
-            qDebug() << "清理了" << paths_to_delete.size() << "个不存在的文件记录，目录:" << directory_path.c_str();
+            std::cout << "清理了" << paths_to_delete.size() << "个不存在的文件记录，目录:" << directory_path << std::endl;
         }
         
         return true;
         
     } catch (const std::filesystem::filesystem_error& e) {
-        qCritical() << "文件系统错误扫描单个目录:" << directory_path.c_str() 
-                   << "错误:" << e.what();
+        std::cerr << "文件系统错误扫描单个目录:" << directory_path << "错误:" << e.what() << std::endl;
         return false;
     } catch (const std::exception& e) {
-        qCritical() << "扫描单个目录异常:" << directory_path.c_str() << "错误:" << e.what();
+        std::cerr << "扫描单个目录异常:" << directory_path << "错误:" << e.what() << std::endl;
         return false;
     }
 }
@@ -346,7 +337,7 @@ std::unique_ptr<FileInfo> FileScanner::get_file_info(const std::filesystem::path
         return file_info;
         
     } catch (const std::exception& e) {
-        qCritical() << "获取文件信息失败 " << file_path.string().c_str() << ": " << e.what();
+        std::cerr << "获取文件信息失败 " << file_path.string().c_str() << ": " << e.what();
         return nullptr;
     }
 }
@@ -380,7 +371,7 @@ std::unique_ptr<FileInfo> FileScanner::get_directory_info(const std::filesystem:
         return file_info;
         
     } catch (const std::exception& e) {
-        qCritical() << "获取目录信息失败 " << dir_path.string().c_str() << ": " << e.what();
+        std::cerr << "获取目录信息失败 " << dir_path.string().c_str() << ": " << e.what();
         return nullptr;
     }
 }
@@ -407,7 +398,7 @@ std::string FileScanner::get_mime_type(const std::filesystem::path& file_path) {
 void FileScanner::start_file_watcher() {
     // 简化的文件监听器，实际应该使用inotify等系统API
     watcher_thread_ = std::thread([this]() {
-        qDebug() << "启动文件监听器: " << directory_path_.c_str();
+        std::cout << "启动文件监听器: " << directory_path_ << std::endl;
         
         // 这里应该实现真正的文件系统监控
         // 为了简化，这里只是空实现
@@ -416,14 +407,14 @@ void FileScanner::start_file_watcher() {
         }
     });
     
-    qDebug() << "文件监听器已启动";
+    std::cout << "文件监听器已启动" << std::endl;
 }
 
 void FileScanner::stop_file_watcher() {
     if (watcher_thread_.joinable()) {
         stop_watching_ = true;
         watcher_thread_.join();
-        qDebug() << "文件监听器已停止";
+        std::cout << "文件监听器已停止" << std::endl;
     }
 }
 
@@ -437,7 +428,7 @@ bool FileScanner::run() {
         }
         return false;
     } catch (const std::exception& e) {
-        qCritical() << "扫描器运行异常: " << e.what();
+        std::cerr << "扫描器运行异常: " << e.what() << std::endl;
         return false;
     }
 }
@@ -450,7 +441,7 @@ void FileScanner::close() {
     if (scan_obj_) {
         scan_obj_->close();
     }
-    qDebug() << "文件扫描器已关闭";
+    std::cout << "文件扫描器已关闭" << std::endl;
 }
 
 std::string FileScanner::get_current_time() {

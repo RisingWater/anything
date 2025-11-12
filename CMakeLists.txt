@@ -46,9 +46,12 @@ set(CLIENT_SOURCES
 add_executable(${CLIENT_TARGET} ${CLIENT_SOURCES})
 
 set(SERVER_SOURCES
+    FileDB.cpp
+    FileScanner.cpp
     ScanObject.cpp
     Utils.cpp
     WebService.cpp
+    FileScannerManager.cpp
     main.cpp
     )
 

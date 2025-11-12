@@ -1,9 +1,12 @@
 #include "crow.h"
 #include "WebService.h"
+#include "FileScannerManager.h"
 
 int main() {
     crow::SimpleApp app;
     WebService web_service;
+
+    FileScannerManager::getInstance().initializeAllScanners();
 
     // 全局 CORS 处理
     CROW_CATCHALL_ROUTE(app)

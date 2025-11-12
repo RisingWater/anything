@@ -184,6 +184,45 @@ bool ScanObject::update_last_scan_time(const std::string& directory_path) {
     return false;
 }
 
+std::unique_ptr<ScanObjectInfo> ScanObject::get_scan_object_by_id(const std::string& id)
+{
+    const std::string sql = "SELECT * FROM scan_objects WHERE id = ?";
+    std::vector<std::string> params = {id};
+
+    if (!is_connected_) return nullptr;
+
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+    
+    if (rc != SQLITE_OK) {
+        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_) << std::endl;
+        return nullptr;
+    }
+
+    sqlite3_bind_text(stmt, 1, id.c_str(), -1, SQLITE_TRANSIENT);
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) { 
+        auto scan_obj = std::make_unique<ScanObjectInfo>();
+        scan_obj->id = sqlite3_column_int(stmt, 0);
+        scan_obj->directory_path = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        scan_obj->display_name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        scan_obj->description = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+        scan_obj->is_active = sqlite3_column_int(stmt, 4);
+        scan_obj->is_recursive = sqlite3_column_int(stmt, 5);
+        
+        const char* scan_time = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
+        if (scan_time) {
+            scan_obj->last_successful_scan_time = scan_time;
+        }
+        
+        sqlite3_finalize(stmt);
+        return scan_obj;
+    }
+
+    sqlite3_finalize(stmt);
+    return nullptr;
+}
+
 std::unique_ptr<ScanObjectInfo> ScanObject::get_scan_object(const std::string& directory_path) {
     std::filesystem::path dir_path(directory_path);
     std::string absolute_path = std::filesystem::absolute(dir_path).string();

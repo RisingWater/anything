@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "WebService.h"
 #include "ScanObject.h"
+#include "FileScannerManager.h"
 #include "Utils.h"
 #include <iostream>
 
@@ -60,10 +61,6 @@ crow::response WebService::add_scan_obj(const std::string& uid, const crow::requ
         
         std::string path = json["directory_path"].s();
         std::string description = json["description"].s();
-
-        // 输出调试信息，查看接收到的中文
-        std::cout << "Received directory_path: " << path << std::endl;
-        std::cout << "Received description: " << description << std::endl;
         
         crow::response res;
         crow::json::wvalue result;
@@ -188,6 +185,8 @@ bool WebService::db_add_scan_obj(const std::string& uid, const std::string& path
     result["is_recursive"] = object->is_recursive;
     result["last_successful_scan_time"] = object->last_successful_scan_time;
 
+    FileScannerManager::getInstance().addScanner(db_path, path);
+
     return true;
 }
 
@@ -200,6 +199,15 @@ bool WebService::db_delete_scan_obj(const std::string& uid, const std::string& i
         error_msg = "Failed to initialize database.";
         return false;
     }
+
+    auto object = scan_object.get_scan_object_by_id(id);
+
+    if (object == nullptr) {
+        error_msg = "Scan object not found.";
+        return false;
+    }
+
+    FileScannerManager::getInstance().removeScanner(db_path, object->directory_path);
 
     scan_object.delete_scan_object(id);
 

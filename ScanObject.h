@@ -38,6 +38,8 @@ public:
     bool update_last_scan_time(const std::string& directory_path);
     
     std::unique_ptr<ScanObjectInfo> get_scan_object(const std::string& directory_path);
+    std::unique_ptr<ScanObjectInfo> get_scan_object_by_id(const std::string& id);
+
     std::vector<ScanObjectInfo> get_all_scan_objects(bool active_only = true);
     bool scan_object_exists(const std::string& directory_path);
     
