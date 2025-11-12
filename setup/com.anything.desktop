@@ -1,0 +1,15 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Anything
+Name[zh_CN]=Anything 文件搜索
+Comment=Fast file search utility
+Comment[zh_CN]=快速文件搜索工具
+Exec=/opt/apps/com.anything/files/bin/anything
+Icon=/usr/share/pixmaps/anything.png
+Categories=Utility;FileTools;
+Keywords=file;search;find;locate;anything;
+Terminal=false
+StartupNotify=true
+MimeType=inode/directory;
+X-AppImage-Version=1.0.0

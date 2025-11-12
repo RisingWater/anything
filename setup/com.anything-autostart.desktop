@@ -1,0 +1,15 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Anything
+Name[zh_CN]=Anything 文件搜索
+Comment=File search utility - Autostart
+Comment[zh_CN]=文件搜索工具 - 开机自启动
+Exec=/opt/apps/com.anything/files/bin/anything
+Icon=/usr/share/pixmaps/anything.png
+Categories=Utility;
+Terminal=false
+StartupNotify=false
+X-GNOME-Autostart-Delay=10
+Hidden=false
+NoDisplay=false
