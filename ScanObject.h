@@ -32,6 +32,8 @@ public:
                         const std::string& display_name = "",
                         const std::string& description = "",
                         bool is_recursive = true);
+
+    bool delete_scan_object(const std::string& id);
     
     bool update_last_scan_time(const std::string& directory_path);
     

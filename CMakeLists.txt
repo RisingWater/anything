@@ -1,14 +1,15 @@
 cmake_minimum_required(VERSION 3.8)
 project(Anything)
 
-set(TARGET anything)
+set(CLIENT_TARGET anything)
+set(SERVER_TARGET anything_file_service)
 
 # 设置C++标准
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # 设置编译选项
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -O2")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -O2 -Wno-unused-parameter")
 
 find_package(Qt5 REQUIRED COMPONENTS Core Widgets)
 
@@ -24,10 +25,13 @@ set(CMAKE_AUTOMOC ON)
 QT5_ADD_RESOURCES(QRC_SRCS anything.qrc)
 
 # 包含当前目录
-include_directories(.)
+include_directories(.
+    3rdparty/crow/include
+    3rdparty/asio/include
+    )
 
 # 源文件
-set(SOURCES
+set(CLIENT_SOURCES
     FileDB.cpp
     ScanObject.cpp
     FileScanner.cpp
@@ -39,10 +43,19 @@ set(SOURCES
 )
 
 # 创建可执行文件
-add_executable(${TARGET} ${SOURCES})
+add_executable(${CLIENT_TARGET} ${CLIENT_SOURCES})
+
+set(SERVER_SOURCES
+    ScanObject.cpp
+    Utils.cpp
+    WebService.cpp
+    main.cpp
+    )
+
+add_executable(${SERVER_TARGET} ${SERVER_SOURCES})
 
 # 链接库
-target_link_libraries(${TARGET}
+target_link_libraries(${CLIENT_TARGET}
     Qt5::Core 
     Qt5::Widgets 
     /usr/lib/x86_64-linux-gnu/libsqlite3.a
@@ -51,8 +64,19 @@ target_link_libraries(${TARGET}
     dl
 )
 
+target_link_libraries(${SERVER_TARGET}
+    /usr/lib/x86_64-linux-gnu/libsqlite3.a
+    stdc++fs
+    pthread
+    dl
+)
+
 # 安装目标
-install(TARGETS ${TARGET} 
+install(TARGETS ${CLIENT_TARGET} 
+    RUNTIME DESTINATION /opt/apps/com.anything/files/bin
+)
+
+install(TARGETS ${SERVER_TARGET} 
     RUNTIME DESTINATION /opt/apps/com.anything/files/bin
 )
 

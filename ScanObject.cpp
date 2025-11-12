@@ -146,6 +146,21 @@ bool ScanObject::add_scan_object(const std::string& directory_path,
     return false;
 }
 
+bool ScanObject::delete_scan_object(const std::string& id)
+{
+    const std::string sql = "DELETE FROM scan_objects WHERE id = ?";
+
+    std::vector<std::string> params = {id};
+
+    if (execute_sql_with_params(sql, params)) {
+        std::cout << "扫描对象删除成功: " << id << std::endl;
+        return true;
+    }
+
+    std::cerr << "扫描对象不存在: " << id << std::endl;
+    return false;
+}
+
 bool ScanObject::update_last_scan_time(const std::string& directory_path) {
     std::filesystem::path dir_path(directory_path);
     std::string absolute_path = std::filesystem::absolute(dir_path).string();
