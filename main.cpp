@@ -40,6 +40,13 @@ int main() {
         return web_service.delete_scan_obj(uid, id);
     });
 
+    // GET /api/filedb/{uid}/{search_text} - 删除指定id的表项
+    CROW_ROUTE(app, "/api/filedb/<string>/<string>")
+    .methods("GET"_method)
+    ([&web_service](const std::string& uid, const std::string& search_text) {
+        return web_service.get_filedb_objs(uid, search_text);
+    });
+
     std::cout << "🚀 Web Service 已启动!" << std::endl;
     std::cout << "📍 服务地址: http://localhost:5071" << std::endl;
     

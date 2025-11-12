@@ -105,41 +105,64 @@ crow::response WebService::delete_scan_obj(const std::string& uid, const std::st
     return res;
 }
 
+// GET /api/filedb/{uid}/{search_text} - 获取指定数据库的filedb_objs列表
+crow::response WebService::get_filedb_objs(const std::string& uid, const std::string& search_text)
+{
+    crow::response res;
+    crow::json::wvalue result;
+    std::string error_msg;
+
+    if (db_get_filedb_objs(uid, search_text, result, error_msg)) {
+        // 获取数据成功
+        crow::json::wvalue response;
+        response["result"] = "ok";
+        response["filedb_objs"] = std::move(result);
+        set_cors_headers(res);
+        res.write(response.dump());
+    } else {
+        // 获取数据失败
+        res = create_error_response(std::string("Failed to get filedb objects, error message: ") + error_msg);
+    }
+
+    return res;
+}
+
 // 数据库操作函数 - 需要你来实现这些函数
 bool WebService::db_get_scan_objs(const std::string& uid, crow::json::wvalue& result, std::string &error_msg) {
     
     std::string db_path = get_db_path_by_uid(uid);
 
-    if (std::filesystem::exists(db_path)) {
-        // 数据库文件存在，开始处理
-        ScanObject scan_object(db_path);
-
-        if (scan_object.init_database()) {
-            // 数据库初始化成功，开始处理
-            std::vector<ScanObjectInfo> scan_objects = scan_object.get_all_scan_objects();
-
-            int index = 0;
-            for (const auto& object : scan_objects) {
-                crow::json::wvalue scan_object_json;
-                scan_object_json["id"] = object.id;
-                scan_object_json["directory_path"] = object.directory_path;
-                scan_object_json["display_name"] = object.display_name;
-                scan_object_json["description"] = object.description;
-                scan_object_json["is_active"] = object.is_active;
-                scan_object_json["is_recursive"] = object.is_recursive;
-                scan_object_json["last_successful_scan_time"] = object.last_successful_scan_time;
-                result[index++] = std::move(scan_object_json);
-            }
-        }
-
-        return true;
-    }
-    else
-    {
+    if (!std::filesystem::exists(db_path)) {
         error_msg = "Database file does not exist.";
+        return false;
     }
 
-    return false;
+    // 数据库文件存在，开始处理
+    ScanObject scan_object(db_path);
+
+    if (!scan_object.init_database()) {
+        error_msg = "Failed to initialize database.";
+        return false;
+    }
+
+    // 数据库初始化成功，开始处理
+    std::vector<ScanObjectInfo> scan_objects = scan_object.get_all_scan_objects();
+
+    result = crow::json::wvalue();
+    int index = 0;
+    for (const auto& object : scan_objects) {
+        crow::json::wvalue scan_object_json;
+        scan_object_json["id"] = object.id;
+        scan_object_json["directory_path"] = object.directory_path;
+        scan_object_json["display_name"] = object.display_name;
+        scan_object_json["description"] = object.description;
+        scan_object_json["is_active"] = object.is_active;
+        scan_object_json["is_recursive"] = object.is_recursive;
+        scan_object_json["last_successful_scan_time"] = object.last_successful_scan_time;
+        result[index++] = std::move(scan_object_json);
+    }
+
+    return true;
 }
 
 bool WebService::db_add_scan_obj(const std::string& uid, const std::string& path, 
@@ -213,3 +236,39 @@ bool WebService::db_delete_scan_obj(const std::string& uid, const std::string& i
 
     return true;
 }
+
+bool WebService::db_get_filedb_objs(const std::string& uid, const std::string& search_text, 
+                                   crow::json::wvalue& result, std::string& error_msg) {
+    std::string db_path = get_db_path_by_uid(uid);
+
+    if (!std::filesystem::exists(db_path)) {
+        error_msg = "Database file does not exist.";
+        return false;
+    }
+
+    // 现在处理数据库操作
+    FileDB filedb(db_path);
+    if (!filedb.init_database()) {
+        error_msg = "Failed to initialize database.";
+        return false;
+    }
+
+    result = crow::json::wvalue();
+
+    int index = 0;
+    std::vector<FileInfo> files = filedb.search_files(search_text, "file_name");
+    for (const auto& file : files) {
+        crow::json::wvalue file_json;
+        file_json["id"] = file.id;
+        file_json["file_name"] = file.file_name;
+        file_json["file_path"] = file.file_path;
+        file_json["file_extension"] = file.file_extension;
+        file_json["mime_type"] = file.mime_type;
+        file_json["is_directory"] = file.is_directory;
+
+        result[index++] = std::move(file_json);
+    }
+
+    return true;
+}
+                                 
