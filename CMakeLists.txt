@@ -34,16 +34,8 @@ install(FILES
 
 # 安装图标（如果有）
 install(FILES 
-    ${CMAKE_CURRENT_SOURCE_DIR}/res/anything.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/client/res/anything.png
     DESTINATION /usr/share/pixmaps
-)
-
-# 安装 postinst 和 prerm 脚本
-install(FILES 
-    ${CMAKE_CURRENT_SOURCE_DIR}/setup/debian/postinst
-    ${CMAKE_CURRENT_SOURCE_DIR}/setup/debian/prerm
-    DESTINATION /DEBIAN
-    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
 )
 
 # DEB 打包配置

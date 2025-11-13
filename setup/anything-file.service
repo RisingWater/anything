@@ -4,7 +4,6 @@ After=network.target
 
 [Service]
 Type=simple
-User=wangxu
 ExecStart=/opt/apps/com.anything/files/bin/anything_file_service
 WorkingDirectory=/opt/apps/com.anything/files
 Restart=always

@@ -207,8 +207,15 @@ void ScanObjDialog::onScanObjectsLoaded(QNetworkReply* reply)
             if (result == "ok") {
                 // 清空表格
                 table_widget_->setRowCount(0);
-                
-                if (obj.contains("scan_objs") && obj["scan_objs"].isArray()) {
+
+                int count = obj["count"].toInt();
+
+                if (count == 0) {
+                    if (QMessageBox::question(this, "提示", "没有扫描目录，是否添加默认目录？", 
+                                            QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
+                        addScanObjectInternal(QDir::homePath(), "主目录");
+                    }
+                } else if (obj.contains("scan_objs") && obj["scan_objs"].isArray()) {
                     QJsonArray array = obj["scan_objs"].toArray();
                     for (const QJsonValue& value : array) {
                         if (value.isObject()) {
