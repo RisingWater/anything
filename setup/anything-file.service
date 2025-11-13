@@ -1,0 +1,14 @@
+[Unit]
+Description=Anything File Service
+After=network.target
+
+[Service]
+Type=simple
+User=wangxu
+ExecStart=/opt/apps/com.anything/files/bin/anything_file_service
+WorkingDirectory=/opt/apps/com.anything/files
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

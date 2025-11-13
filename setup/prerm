@@ -1,0 +1,4 @@
+#!/bin/bash
+
+systemctl stop anything-file.service
+systemctl disable anything-file.service

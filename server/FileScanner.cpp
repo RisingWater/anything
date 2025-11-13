@@ -149,20 +149,20 @@ bool FileScanner::scan_directory_recursive(const std::string& current_dir, bool 
             std::string canonical_str = canonical_path.string();
             
             if (visited_paths.count(canonical_str)) {
-                std::cerr << "检测到符号链接循环，跳过目录:" << current_dir.c_str();
+                std::cerr << "检测到符号链接循环，跳过目录:" << current_dir.c_str() << std::endl;
                 return true; // 返回true继续扫描其他目录
             }
             
             visited_paths.insert(canonical_str);
             
         } catch (const std::filesystem::filesystem_error& e) {
-            std::cerr << "无法解析规范路径:" << current_dir.c_str() << "错误:" << e.what();
+            std::cerr << "无法解析规范路径:" << current_dir.c_str() << "错误:" << e.what() << std::endl;
             return false;
         }
         
         // 扫描当前目录的文件
         if (!scan_single_directory(current_dir, db_operation)) {
-            std::cerr << "当前目录扫描失败:" << current_dir.c_str();
+            std::cerr << "当前目录扫描失败:" << current_dir.c_str() << std::endl;
             // 不立即返回false，继续尝试其他目录
         }
         
@@ -294,7 +294,9 @@ bool FileScanner::scan_single_directory(const std::string& directory_path, bool 
                 }
             }
             
-            std::cout << "清理了" << paths_to_delete.size() << "个不存在的文件记录，目录:" << directory_path << std::endl;
+            if (paths_to_delete.size() > 0) {
+                std::cout << "清理了" << paths_to_delete.size() << "个不存在的文件记录，目录:" << directory_path << std::endl;
+            }
         }
         
         return true;

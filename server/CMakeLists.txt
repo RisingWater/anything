@@ -13,6 +13,7 @@ include_directories(.
     )
 
 set(SERVER_SOURCES
+    DBManager.cpp
     FileDB.cpp
     FileScanner.cpp
     ScanObject.cpp

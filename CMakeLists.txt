@@ -8,8 +8,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # 设置编译选项
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -O2 -Wno-unused-parameter")
 
+set(EXECUTABLE_OUTPUT_PATH  ${CMAKE_BINARY_DIR}/out)
+set(LIBRARY_OUTPUT_PATH     ${CMAKE_BINARY_DIR}/out)
+
 add_subdirectory(server)
-#add_subdirectory(client)
+add_subdirectory(client)
+
+# 安装 service 文件
+install(FILES 
+    ${CMAKE_CURRENT_SOURCE_DIR}/setup/anything-file.service
+    DESTINATION /lib/systemd/system
+)
 
 # 安装 desktop 文件到应用程序菜单
 install(FILES 
@@ -29,7 +38,16 @@ install(FILES
     DESTINATION /usr/share/pixmaps
 )
 
+# 安装 postinst 和 prerm 脚本
+install(FILES 
+    ${CMAKE_CURRENT_SOURCE_DIR}/setup/debian/postinst
+    ${CMAKE_CURRENT_SOURCE_DIR}/setup/debian/prerm
+    DESTINATION /DEBIAN
+    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+)
+
 # DEB 打包配置
+set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${CMAKE_SOURCE_DIR}/setup/preinst;${CMAKE_SOURCE_DIR}/setup/postinst;${CMAKE_SOURCE_DIR}/setup/postrm;${CMAKE_SOURCE_DIR}/setup/prerm")
 set(CPACK_GENERATOR "DEB")
 set(CPACK_DEBIAN_PACKAGE_NAME "anything")
 set(CPACK_DEBIAN_PACKAGE_VERSION "1.0.0")
@@ -39,7 +57,7 @@ set(CPACK_DEBIAN_PACKAGE_DESCRIPTION "Fast file search utility")
 set(CPACK_DEBIAN_PACKAGE_DESCRIPTION_SUMMARY "Lightning-fast desktop file search tool")
 set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libqt5core5a, libqt5gui5, libqt5widgets5, libc6, libstdc++6")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libqt5core5a, libqt5gui5, libqt5widgets5, libqt5network5, libc6, libstdc++6")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/RisingWater/anything")
 
 # 包含 CPack

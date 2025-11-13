@@ -1,0 +1,4 @@
+#!/bin/bash
+
+systemctl enable anything-file.service
+systemctl start anything-file.service    

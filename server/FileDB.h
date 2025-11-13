@@ -7,6 +7,7 @@
 #include <memory>
 #include "sqlite3.h"
 #include <chrono>
+#include "DBManager.h"
 
 struct FileInfo {
     int id;
@@ -46,7 +47,7 @@ public:
     
     std::vector<FileInfo> search_files(const std::string& search_term, 
                                       const std::string& search_field = "file_name",
-                                      int limit = 50);
+                                      int limit = -1);
     
     std::vector<FileInfo> get_files_by_parent_directory(const std::string& parent_directory);
     bool batch_delete_files(const std::vector<std::string>& file_paths);
@@ -72,8 +73,9 @@ private:
     bool execute_sql_with_params(const std::string& sql, 
                                 const std::vector<std::string>& params);
 
-    sqlite3* db_;
+    DBConnection* db_conn_;
     std::string db_path_;
+    mutable std::mutex operation_mutex_; // 用于操作级别的线程安全
     bool is_connected_;
     
     int transaction_depth_ = 0;

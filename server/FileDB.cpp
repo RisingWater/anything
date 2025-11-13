@@ -5,7 +5,7 @@
 #include <algorithm>
 
 FileDB::FileDB(const std::string& db_path) : 
-    db_(nullptr), 
+    db_conn_(nullptr), 
     db_path_(db_path), 
     is_connected_(false), 
     transaction_depth_(0) {
@@ -18,9 +18,9 @@ FileDB::~FileDB() {
 }
 
 bool FileDB::init_database() {
-    int rc = sqlite3_open(db_path_.c_str(), &db_);
-    if (rc != SQLITE_OK) {
-        std::cerr << "无法打开数据库: " << sqlite3_errmsg(db_) << std::endl;
+    db_conn_ = DBManager::getInstance().getConnection(db_path_);
+    if (db_conn_ == nullptr || !db_conn_->isValid()) {
+        std::cerr << "无法打开数据库: " << std::endl;
         return false;
     }
     
@@ -78,9 +78,11 @@ bool FileDB::init_database() {
 
 bool FileDB::execute_sql(const std::string& sql) {
     if (!is_connected_) return false;
+
+    std::lock_guard<std::mutex> lock(operation_mutex_);
     
     char* err_msg = nullptr;
-    int rc = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &err_msg);
+    int rc = sqlite3_exec(db_conn_->get(), sql.c_str(), nullptr, nullptr, &err_msg);
     
     if (rc != SQLITE_OK) {
         std::cerr << "SQL执行错误: " << err_msg << std::endl;
@@ -131,9 +133,9 @@ sqlite3_stmt* FileDB::get_prepared_statement(const std::string& sql) {
     
     // 准备新的statement
     sqlite3_stmt* stmt = nullptr;
-    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+    int rc = sqlite3_prepare_v2(db_conn_->get(), sql.c_str(), -1, &stmt, nullptr);
     if (rc != SQLITE_OK) {
-        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_) 
+        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_conn_->get()) 
                   << " SQL: " << sql << std::endl;
         return nullptr;
     }
@@ -160,6 +162,8 @@ bool FileDB::execute_sql_with_params(const std::string& sql,
     if (!is_connected_) {
         return false;
     }
+
+    std::lock_guard<std::mutex> lock(operation_mutex_);
     
     sqlite3_stmt* stmt = get_prepared_statement(sql);
     if (!stmt) {
@@ -174,7 +178,7 @@ bool FileDB::execute_sql_with_params(const std::string& sql,
     // 执行
     int rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
-        std::cerr << "执行SQL失败: " << sqlite3_errmsg(db_) << std::endl;
+        std::cerr << "执行SQL失败: " << sqlite3_errmsg(db_conn_->get()) << std::endl;
         sqlite3_reset(stmt);
         return false;
     }
@@ -315,10 +319,12 @@ std::unique_ptr<FileInfo> FileDB::get_file(const std::string& file_path) {
     std::vector<std::string> params = {file_path};
     
     if (!is_connected_) return nullptr;
+
+    std::lock_guard<std::mutex> lock(operation_mutex_);
     
     sqlite3_stmt* stmt = get_prepared_statement(sql);
     if (!stmt) {
-        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_) << std::endl;
+        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_conn_->get()) << std::endl;
         return nullptr;
     }
         
@@ -351,6 +357,8 @@ bool FileDB::file_exists(const std::string& file_path) {
     std::vector<std::string> params = {file_path};
     
     if (!is_connected_) return false;
+
+    std::lock_guard<std::mutex> lock(operation_mutex_);
     
     sqlite3_stmt* stmt = get_prepared_statement(sql);
     if (!stmt) {
@@ -386,12 +394,14 @@ std::vector<FileInfo> FileDB::search_files(const std::string& search_term,
     std::string pattern = "%" + search_term + "%";
     
     if (!is_connected_) return results;
+
+    std::lock_guard<std::mutex> lock(operation_mutex_);
     
     sqlite3_stmt* stmt;
-    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+    int rc = sqlite3_prepare_v2(db_conn_->get(), sql.c_str(), -1, &stmt, nullptr);
     
     if (rc != SQLITE_OK) {
-        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_) << std::endl;
+        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_conn_->get()) << std::endl;
         return results;
     }
     
@@ -424,12 +434,14 @@ std::vector<FileInfo> FileDB::get_files_by_parent_directory(const std::string& p
     const std::string sql = "SELECT * FROM file_info WHERE parent_directory = ?";
     
     if (!is_connected_) return results;
+
+    std::lock_guard<std::mutex> lock(operation_mutex_);
     
     sqlite3_stmt* stmt;
-    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+    int rc = sqlite3_prepare_v2(db_conn_->get(), sql.c_str(), -1, &stmt, nullptr);
     
     if (rc != SQLITE_OK) {
-        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_) << std::endl;
+        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_conn_->get()) << std::endl;
         return results;
     }
     
@@ -458,6 +470,8 @@ std::vector<FileInfo> FileDB::get_files_by_parent_directory(const std::string& p
 
 bool FileDB::batch_delete_files(const std::vector<std::string>& file_paths) {
     if (file_paths.empty()) return true;
+
+    std::lock_guard<std::mutex> lock(operation_mutex_);
     
     std::string sql = "DELETE FROM file_info WHERE file_path IN (";
     for (size_t i = 0; i < file_paths.size(); ++i) {
@@ -479,11 +493,13 @@ std::unordered_map<std::string, int> FileDB::get_database_stats() {
     std::unordered_map<std::string, int> stats;
     
     if (!is_connected_) return stats;
+
+    std::lock_guard<std::mutex> lock(operation_mutex_);
     
     // 总文件数
     sqlite3_stmt* stmt;
     const char* sql = "SELECT COUNT(*) FROM file_info";
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+    if (sqlite3_prepare_v2(db_conn_->get(), sql, -1, &stmt, nullptr) == SQLITE_OK) {
         if (sqlite3_step(stmt) == SQLITE_ROW) {
             stats["total_files"] = sqlite3_column_int(stmt, 0);
         }
@@ -492,7 +508,7 @@ std::unordered_map<std::string, int> FileDB::get_database_stats() {
     
     // 目录数
     sql = "SELECT COUNT(*) FROM file_info WHERE is_directory = 1";
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+    if (sqlite3_prepare_v2(db_conn_->get(), sql, -1, &stmt, nullptr) == SQLITE_OK) {
         if (sqlite3_step(stmt) == SQLITE_ROW) {
             stats["total_dirs"] = sqlite3_column_int(stmt, 0);
         }
@@ -501,7 +517,7 @@ std::unordered_map<std::string, int> FileDB::get_database_stats() {
     
     // 实际文件数
     sql = "SELECT COUNT(*) FROM file_info WHERE is_directory = 0";
-    if (sqlite3_prepare_v2(db_, sql, -1, &stmt, nullptr) == SQLITE_OK) {
+    if (sqlite3_prepare_v2(db_conn_->get(), sql, -1, &stmt, nullptr) == SQLITE_OK) {
         if (sqlite3_step(stmt) == SQLITE_ROW) {
             stats["total_real_files"] = sqlite3_column_int(stmt, 0);
         }
@@ -524,9 +540,9 @@ bool FileDB::clear_database() {
 }
 
 void FileDB::close() {
-    if (db_) {
-        sqlite3_close(db_);
-        db_ = nullptr;
+    if (db_conn_) {
+        DBManager::getInstance().releaseConnection(db_conn_);
+        db_conn_ = nullptr;
         is_connected_ = false;
         std::cout << "数据库连接已关闭" << std::endl;
     }

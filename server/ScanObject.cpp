@@ -4,7 +4,7 @@
 #include <iomanip>
 
 ScanObject::ScanObject(const std::string& db_path) 
-    : db_(nullptr), db_path_(db_path), is_connected_(false) {
+    : db_conn_(nullptr), db_path_(db_path), is_connected_(false) {
     init_database();
 }
 
@@ -13,9 +13,9 @@ ScanObject::~ScanObject() {
 }
 
 bool ScanObject::init_database() {
-    int rc = sqlite3_open(db_path_.c_str(), &db_);
-    if (rc != SQLITE_OK) {
-        std::cerr << "无法打开数据库: " << sqlite3_errmsg(db_) << std::endl;
+    db_conn_ = DBManager::getInstance().getConnection(db_path_);
+    if (db_conn_ == nullptr || !db_conn_->isValid()) {
+        std::cerr << "无法打开数据库: " << std::endl;
         return false;
     }
     
@@ -58,8 +58,10 @@ bool ScanObject::init_database() {
 bool ScanObject::execute_sql(const std::string& sql) {
     if (!is_connected_) return false;
     
+    std::lock_guard<std::mutex> lock(operation_mutex_);
+
     char* err_msg = nullptr;
-    int rc = sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &err_msg);
+    int rc = sqlite3_exec(db_conn_->get(), sql.c_str(), nullptr, nullptr, &err_msg);
     
     if (rc != SQLITE_OK) {
         std::cerr << "SQL执行错误: " << err_msg << std::endl;
@@ -74,11 +76,13 @@ bool ScanObject::execute_sql_with_params(const std::string& sql,
                                        const std::vector<std::string>& params) {
     if (!is_connected_) return false;
     
+    std::lock_guard<std::mutex> lock(operation_mutex_);
+    
     sqlite3_stmt* stmt;
-    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+    int rc = sqlite3_prepare_v2(db_conn_->get(), sql.c_str(), -1, &stmt, nullptr);
     
     if (rc != SQLITE_OK) {
-        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_) << std::endl;
+        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_conn_->get()) << std::endl;
         return false;
     }
     
@@ -191,11 +195,13 @@ std::unique_ptr<ScanObjectInfo> ScanObject::get_scan_object_by_id(const std::str
 
     if (!is_connected_) return nullptr;
 
+    std::lock_guard<std::mutex> lock(operation_mutex_);
+
     sqlite3_stmt* stmt;
-    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+    int rc = sqlite3_prepare_v2(db_conn_->get(), sql.c_str(), -1, &stmt, nullptr);
     
     if (rc != SQLITE_OK) {
-        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_) << std::endl;
+        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_conn_->get()) << std::endl;
         return nullptr;
     }
 
@@ -231,12 +237,14 @@ std::unique_ptr<ScanObjectInfo> ScanObject::get_scan_object(const std::string& d
     std::vector<std::string> params = {absolute_path};
     
     if (!is_connected_) return nullptr;
+
+    std::lock_guard<std::mutex> lock(operation_mutex_);
     
     sqlite3_stmt* stmt;
-    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+    int rc = sqlite3_prepare_v2(db_conn_->get(), sql.c_str(), -1, &stmt, nullptr);
     
     if (rc != SQLITE_OK) {
-        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_) << std::endl;
+        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_conn_->get()) << std::endl;
         return nullptr;
     }
     
@@ -274,12 +282,14 @@ std::vector<ScanObjectInfo> ScanObject::get_all_scan_objects(bool active_only) {
     sql += " ORDER BY directory_path";
     
     if (!is_connected_) return results;
+
+    std::lock_guard<std::mutex> lock(operation_mutex_);
     
     sqlite3_stmt* stmt;
-    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+    int rc = sqlite3_prepare_v2(db_conn_->get(), sql.c_str(), -1, &stmt, nullptr);
     
     if (rc != SQLITE_OK) {
-        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_) << std::endl;
+        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_conn_->get()) << std::endl;
         return results;
     }
     
@@ -312,12 +322,14 @@ bool ScanObject::scan_object_exists(const std::string& directory_path) {
     std::vector<std::string> params = {absolute_path};
     
     if (!is_connected_) return false;
+
+    std::lock_guard<std::mutex> lock(operation_mutex_);
     
     sqlite3_stmt* stmt;
-    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+    int rc = sqlite3_prepare_v2(db_conn_->get(), sql.c_str(), -1, &stmt, nullptr);
     
     if (rc != SQLITE_OK) {
-        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_) << std::endl;
+        std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_conn_->get()) << std::endl;
         return false;
     }
     
@@ -333,9 +345,9 @@ bool ScanObject::scan_object_exists(const std::string& directory_path) {
 }
 
 void ScanObject::close() {
-    if (db_) {
-        sqlite3_close(db_);
-        db_ = nullptr;
+    if (db_conn_) {
+        DBManager::getInstance().releaseConnection(db_conn_);
+        db_conn_ = nullptr;
         is_connected_ = false;
         std::cout << "扫描对象数据库连接已关闭" << std::endl;
     }

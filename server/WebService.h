@@ -21,7 +21,7 @@ public:
 
 private:
     // 数据库操作函数声明（由你实现）
-    bool db_get_scan_objs(const std::string& uid,
+    int db_get_scan_objs(const std::string& uid,
         crow::json::wvalue& result,
         std::string &error_msg);
 
@@ -36,7 +36,7 @@ private:
         crow::json::wvalue& result,
         std::string &error_msg);
 
-    bool db_get_filedb_objs(const std::string& uid, 
+    int db_get_filedb_objs(const std::string& uid, 
         const std::string& search_text, 
         crow::json::wvalue& result,
         std::string &error_msg);

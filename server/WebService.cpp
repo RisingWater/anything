@@ -15,7 +15,7 @@ static void set_cors_headers(crow::response& res) {
 // 创建错误响应
 static crow::response create_error_response(const std::string& message) {
     crow::response res;
-    res.code = 400;
+    res.code = 200;
     crow::json::wvalue error;
     error["result"] = "error";
     error["message"] = message;
@@ -30,17 +30,16 @@ crow::response WebService::get_scan_objs(const std::string& uid) {
     crow::json::wvalue result;
     std::string error_msg;
     
-    if (db_get_scan_objs(uid, result, error_msg)) {
-        // 成功获取数据
-        crow::json::wvalue response;
-        response["result"] = "ok";
-        response["scan_objs"] = std::move(result);
-        set_cors_headers(res);
-        res.write(response.dump());
-    } else {
-        // 获取数据失败
-        res = create_error_response(std::string("Failed to get scan objects, error message: ") + error_msg);
-    }
+    int count = db_get_scan_objs(uid, result, error_msg);
+
+    // 成功获取数据
+    crow::json::wvalue response;
+    response["result"] = "ok";
+    response["count"] = count;
+    response["scan_objs"] = std::move(result);
+    set_cors_headers(res);
+    res.code = 200;
+    res.write(response.dump());
     
     return res;
 }
@@ -72,6 +71,7 @@ crow::response WebService::add_scan_obj(const std::string& uid, const crow::requ
             response["result"] = "ok";
             response["scan_obj"] = std::move(result);
             set_cors_headers(res);
+            res.code = 200;
             res.write(response.dump());
         } else {
             // 添加数据失败
@@ -96,6 +96,7 @@ crow::response WebService::delete_scan_obj(const std::string& uid, const std::st
         crow::json::wvalue response;
         response["result"] = "ok";
         set_cors_headers(res);
+        res.code = 200;
         res.write(response.dump());
     } else {
         // 删除数据失败
@@ -112,43 +113,40 @@ crow::response WebService::get_filedb_objs(const std::string& uid, const std::st
     crow::json::wvalue result;
     std::string error_msg;
 
-    if (db_get_filedb_objs(uid, search_text, result, error_msg)) {
-        // 获取数据成功
-        crow::json::wvalue response;
-        response["result"] = "ok";
-        response["filedb_objs"] = std::move(result);
-        set_cors_headers(res);
-        res.write(response.dump());
-    } else {
-        // 获取数据失败
-        res = create_error_response(std::string("Failed to get filedb objects, error message: ") + error_msg);
-    }
-
+    int count = db_get_filedb_objs(uid, search_text, result, error_msg);
+    
+    // 获取数据成功
+    crow::json::wvalue response;
+    response["result"] = "ok";
+    response["count"] = count;
+    response["filedb_objs"] = std::move(result);
+    set_cors_headers(res);
+    res.code = 200;
+    res.write(response.dump());
+    
     return res;
 }
 
 // 数据库操作函数 - 需要你来实现这些函数
-bool WebService::db_get_scan_objs(const std::string& uid, crow::json::wvalue& result, std::string &error_msg) {
+int WebService::db_get_scan_objs(const std::string& uid, crow::json::wvalue& result, std::string &error_msg) {
     
     std::string db_path = get_db_path_by_uid(uid);
+    result = crow::json::wvalue();
 
     if (!std::filesystem::exists(db_path)) {
-        error_msg = "Database file does not exist.";
-        return false;
+        return 0;
     }
 
     // 数据库文件存在，开始处理
     ScanObject scan_object(db_path);
 
     if (!scan_object.init_database()) {
-        error_msg = "Failed to initialize database.";
-        return false;
+        return 0;
     }
 
     // 数据库初始化成功，开始处理
     std::vector<ScanObjectInfo> scan_objects = scan_object.get_all_scan_objects();
 
-    result = crow::json::wvalue();
     int index = 0;
     for (const auto& object : scan_objects) {
         crow::json::wvalue scan_object_json;
@@ -162,7 +160,7 @@ bool WebService::db_get_scan_objs(const std::string& uid, crow::json::wvalue& re
         result[index++] = std::move(scan_object_json);
     }
 
-    return true;
+    return index;
 }
 
 bool WebService::db_add_scan_obj(const std::string& uid, const std::string& path, 
@@ -209,6 +207,7 @@ bool WebService::db_add_scan_obj(const std::string& uid, const std::string& path
     result["last_successful_scan_time"] = object->last_successful_scan_time;
 
     FileScannerManager::getInstance().addScanner(db_path, path);
+    FileScannerManager::getInstance().startScanner(db_path, path);
 
     return true;
 }
@@ -237,23 +236,20 @@ bool WebService::db_delete_scan_obj(const std::string& uid, const std::string& i
     return true;
 }
 
-bool WebService::db_get_filedb_objs(const std::string& uid, const std::string& search_text, 
+int WebService::db_get_filedb_objs(const std::string& uid, const std::string& search_text, 
                                    crow::json::wvalue& result, std::string& error_msg) {
     std::string db_path = get_db_path_by_uid(uid);
+    result = crow::json::wvalue();
 
     if (!std::filesystem::exists(db_path)) {
-        error_msg = "Database file does not exist.";
-        return false;
+        return 0;
     }
 
     // 现在处理数据库操作
     FileDB filedb(db_path);
     if (!filedb.init_database()) {
-        error_msg = "Failed to initialize database.";
-        return false;
+        return 0;
     }
-
-    result = crow::json::wvalue();
 
     int index = 0;
     std::vector<FileInfo> files = filedb.search_files(search_text, "file_name");
@@ -269,6 +265,6 @@ bool WebService::db_get_filedb_objs(const std::string& uid, const std::string& s
         result[index++] = std::move(file_json);
     }
 
-    return true;
+    return index;
 }
                                  

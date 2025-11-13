@@ -7,6 +7,7 @@
 #include <sqlite3.h>
 #include <chrono>
 #include <filesystem>
+#include "DBManager.h"
 
 struct ScanObjectInfo {
     int id;
@@ -52,8 +53,9 @@ private:
     
     static std::string get_current_time();
     
-    sqlite3* db_;
+    DBConnection* db_conn_;
     std::string db_path_;
+    mutable std::mutex operation_mutex_; // 用于操作级别的线程安全
     bool is_connected_;
 };
 
