@@ -1,1 +1,5 @@
 #!/bin/bash
+
+# 重启 auditd 服务以加载新的 audisp 插件
+echo "Restarting auditd service to load audisp plugin..."
+systemctl restart auditd

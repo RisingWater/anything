@@ -1,4 +1,10 @@
 #!/bin/bash
 
+# 启用并启动 anything-file 服务
+echo "Enabling and starting anything-file.service..."
 systemctl enable anything-file.service
-systemctl start anything-file.service    
+systemctl start anything-file.service
+
+# 重启 auditd 服务以加载新的 audisp 插件
+echo "Restarting auditd service to load audisp plugin..."
+systemctl restart auditd

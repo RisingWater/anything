@@ -10,8 +10,9 @@
 #include <QFileInfo>
 #include <QFile>
 #include <QTextStream>
+#include <QtConcurrent>
+#include <QByteArray>
 
-QNetworkAccessManager *g_netManager = nullptr;
 const QString WEB_URL = "http://localhost:5071/api/audit/events";
 const QString LOG_FILE = "/tmp/audisp-qt-plugin.log";
 
@@ -26,32 +27,59 @@ void logMessage(const QString &msg)
     }
 }
 
-// 发送事件到 WebService
-void sendEventToWebService(const QString &path, const QString &type)
+// 解码十六进制字符串
+QString decodeHexPath(const QString &hexPath)
 {
-    if (!g_netManager) return;
+    // 检查是否是纯十六进制字符串（只包含0-9, A-F）
+    QRegExp hexRegex("^[0-9A-F]+$");
+    if (hexRegex.exactMatch(hexPath)) {
+        QByteArray byteArray = QByteArray::fromHex(hexPath.toLatin1());
+        return QString::fromUtf8(byteArray);
+    }
+    return hexPath; // 如果不是纯十六进制，返回原字符串
+}
 
+// 实际的网络请求函数
+void performNetworkRequest(const QString &path, const QString &type)
+{
+    QNetworkAccessManager localManager;
+    QEventLoop eventLoop;
+    
     QJsonObject obj;
     obj["path"] = path;
     obj["type"] = type;
     obj["timestamp"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
 
-    // 修正：正确的 QNetworkRequest 声明方式
+    QByteArray jsonData = QJsonDocument(obj).toJson(QJsonDocument::Compact);
+    
     QNetworkRequest request;
     request.setUrl(QUrl(WEB_URL));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
-    g_netManager->post(request, QJsonDocument(obj).toJson(QJsonDocument::Compact));
+    QNetworkReply *reply = localManager.post(request, jsonData);
+    
+    QObject::connect(reply, &QNetworkReply::finished, &eventLoop, &QEventLoop::quit);
+    
+    // 设置超时
+    QTimer::singleShot(2000, &eventLoop, &QEventLoop::quit);
+    
+    eventLoop.exec();
+    
+    reply->deleteLater();
+}
+
+void sendEventToWebService(const QString &path, const QString &type)
+{
+    QtConcurrent::run(performNetworkRequest, path, type);
 }
 
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
-    g_netManager = new QNetworkAccessManager(&app);
-
-    QTextStream in(stdin);
 
     logMessage("Audisp Qt plugin started");
+
+    QTextStream in(stdin);
 
     while (!in.atEnd()) {
         QString line = in.readLine().trimmed();
@@ -59,14 +87,20 @@ int main(int argc, char *argv[])
             continue;
 
         QString filePath;
-        QString eventType;  // CREATE / DELETE
+        QString eventType;
 
-        // 解析 PATH 事件
-        // 修正：恢复使用 QString::SkipEmptyParts
+        #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+        QStringList parts = line.split(' ', Qt::SkipEmptyParts);
+        #else
         QStringList parts = line.split(' ', QString::SkipEmptyParts);
+        #endif
+        
         for (const QString &p : parts) {
-            if (p.startsWith("name="))
+            if (p.startsWith("name=")) {
                 filePath = p.mid(5).remove('"');
+                // 解码十六进制路径
+                filePath = decodeHexPath(filePath);
+            }
             else if (p.startsWith("nametype=")) {
                 QString nt = p.mid(9);
                 if (nt == "CREATE") eventType = "CREATE";
@@ -77,7 +111,6 @@ int main(int argc, char *argv[])
         if (filePath.isEmpty() || eventType.isEmpty())
             continue;
 
-        // 判断是文件还是目录
         QFileInfo fi(filePath);
         QString pathType;
         if (eventType == "CREATE") {
@@ -86,11 +119,12 @@ int main(int argc, char *argv[])
             pathType = fi.isDir() ? "RMDIR" : "DELETE";
         }
 
-        // 写日志
+        // 记录解码后的路径
         logMessage(pathType + " " + filePath);
 
-        // 发送到 WebService
         sendEventToWebService(filePath, pathType);
+        
+        QCoreApplication::processEvents();
     }
 
     logMessage("Audisp Qt plugin exited");

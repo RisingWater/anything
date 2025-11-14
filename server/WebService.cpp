@@ -181,13 +181,6 @@ crow::response WebService::audit_event(const crow::request& req)
 {
     crow::response res;
 
-    // 添加请求日志
-    std::cout << "=== Received audit event request ===" << std::endl;
-    std::cout << "URL: " << req.url << std::endl;
-    std::cout << "Body: " << req.body << std::endl;
-    std::cout << "Content-Type: " << req.get_header_value("Content-Type") << std::endl;
-    std::cout << "====================================" << std::endl;
-
     try {
         // 解析 JSON 请求体
         auto json = crow::json::load(req.body);
