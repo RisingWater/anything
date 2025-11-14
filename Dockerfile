@@ -13,3 +13,5 @@ RUN apt-get update && apt-get install -y \
 
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 100 && \
     update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-8 100
+
+CMD ["/bin/bash"]
