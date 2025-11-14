@@ -349,6 +349,6 @@ void ScanObject::close() {
         DBManager::getInstance().releaseConnection(db_conn_);
         db_conn_ = nullptr;
         is_connected_ = false;
-        std::cout << "扫描对象数据库连接已关闭" << std::endl;
+        std::cout << "ScanObject数据库连接已关闭" << std::endl;
     }
 }

@@ -32,6 +32,12 @@ install(FILES
     DESTINATION /etc/xdg/autostart
 )
 
+# 安装 audisp 插件配置文件
+install(FILES 
+    ${CMAKE_CURRENT_SOURCE_DIR}/setup/anything.conf
+    DESTINATION /etc/audisp/plugins.d
+)
+
 # 安装图标（如果有）
 install(FILES 
     ${CMAKE_CURRENT_SOURCE_DIR}/client/res/anything.png

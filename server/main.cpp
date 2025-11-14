@@ -47,6 +47,13 @@ int main() {
         return web_service.get_filedb_objs(uid, search_text);
     });
 
+    // POST /api/audit/events - audit插件发过来的消息通告
+    CROW_ROUTE(app, "/api/audit/events")
+    .methods("POST"_method)
+    ([&web_service](const crow::request& req) {
+        return web_service.audit_event(req);
+    });
+
     std::cout << "🚀 Web Service 已启动!" << std::endl;
     std::cout << "📍 服务地址: http://localhost:5071" << std::endl;
     

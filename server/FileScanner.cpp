@@ -7,17 +7,18 @@
 #include <ctime>
 
 const std::unordered_set<std::string> FileScanner::DEFAULT_EXCLUDED_DIRS = {
-    ".git", ".svn", ".hg", ".idea", ".vscode", "__pycache__", "node_modules", ".repo"
+    ".git", ".svn", ".hg", ".idea", ".vscode", "__pycache__", "node_modules", ".repo", ".cache"
 };
 
 FileScanner::FileScanner(const std::string& directory_path,
                          const std::string& db_path,
-                         const std::unordered_set<std::string>& excluded_patterns)
-    : directory_path_(std::filesystem::absolute(directory_path).string()),
-      db_path_(db_path),
-      excluded_patterns_(excluded_patterns.empty() ? DEFAULT_EXCLUDED_DIRS : excluded_patterns),
-      stop_watching_(false),
-      total_file_count_(0) {
+                         const std::unordered_set<std::string>& excluded_patterns) : 
+    directory_path_(std::filesystem::absolute(directory_path).string()),
+    db_path_(db_path),
+    excluded_patterns_(excluded_patterns.empty() ? DEFAULT_EXCLUDED_DIRS : excluded_patterns),
+    is_watching_(false),
+    total_file_count_(0),
+    file_watcher_(nullptr) {
     
     file_db_ = std::make_unique<FileDB>(db_path_);
     scan_obj_ = std::make_unique<ScanObject>(db_path_);
@@ -30,17 +31,12 @@ FileScanner::FileScanner(const std::string& directory_path,
 }
 
 FileScanner::~FileScanner() {
+    std::cout << "文件扫描器析构: " << directory_path_ << std::endl;
     close();
 }
 
-void FileScanner::setProgressCallback(ProgressCallback callback) {
-    progress_callback_ = callback;
-}
-
-void FileScanner::report_progress(const std::string& message) {
-    if (progress_callback_) {
-        progress_callback_(message);
-    }
+bool FileScanner::directory_match(const std::string &file_path) {
+    return file_path.find(directory_path_) == 0;
 }
 
 bool FileScanner::should_exclude_directory(const std::filesystem::path& dir_path) {
@@ -56,6 +52,36 @@ bool FileScanner::should_exclude_directory(const std::filesystem::path& dir_path
         if (pattern.find('*') != std::string::npos) {
             if (fnmatch(pattern.c_str(), dir_name.c_str(), 0) == 0) {
                 return true;
+            }
+        }
+    }
+    
+    return false;
+}
+
+bool FileScanner::is_path_contains_excluded_directory(const std::filesystem::path& file_path) {
+    std::filesystem::path current_path = file_path.parent_path(); // 从父目录开始检查
+    
+    // 逐级向上检查每个目录组件
+    for (const auto& component : current_path) {
+        std::string dir_name = component.string();
+        
+        // 跳过空组件和根目录
+        if (dir_name.empty() || dir_name == "/") {
+            continue;
+        }
+        
+        // 检查精确匹配
+        if (excluded_patterns_.find(dir_name) != excluded_patterns_.end()) {
+            return true;
+        }
+        
+        // 检查通配符匹配
+        for (const auto& pattern : excluded_patterns_) {
+            if (pattern.find('*') != std::string::npos) {
+                if (fnmatch(pattern.c_str(), dir_name.c_str(), 0) == 0) {
+                    return true;
+                }
             }
         }
     }
@@ -88,14 +114,14 @@ bool FileScanner::should_rescan()
     return true;
 }
 
-bool FileScanner::scan_directory(bool db_operation) {
+bool FileScanner::scan_directory() {
     // 全局符号链接检测集合
     static std::unordered_set<std::string> global_visited_paths;
     global_visited_paths.clear(); // 每次扫描前清空
     
     try {
         // 检查是否需要扫描
-        if (db_operation && !should_rescan()) {
+        if (!should_rescan()) {
             return true;
         }
 
@@ -116,7 +142,7 @@ bool FileScanner::scan_directory(bool db_operation) {
         }
         
         // 递归扫描，传入全局路径集合
-        bool success = scan_directory_recursive(directory_path_, db_operation, global_visited_paths);
+        bool success = scan_directory_recursive(directory_path_, global_visited_paths);
         
         // 更新扫描时间
         if (success) {
@@ -138,8 +164,7 @@ bool FileScanner::scan_directory(bool db_operation) {
     }
 }
 
-bool FileScanner::scan_directory_recursive(const std::string& current_dir, bool db_operation, 
-                                         std::unordered_set<std::string>& visited_paths) {
+bool FileScanner::scan_directory_recursive(const std::string& current_dir, std::unordered_set<std::string>& visited_paths) {
     try {
         std::filesystem::path current_path(current_dir);
         
@@ -161,7 +186,7 @@ bool FileScanner::scan_directory_recursive(const std::string& current_dir, bool 
         }
         
         // 扫描当前目录的文件
-        if (!scan_single_directory(current_dir, db_operation)) {
+        if (!scan_single_directory(current_dir)) {
             std::cerr << "当前目录扫描失败:" << current_dir.c_str() << std::endl;
             // 不立即返回false，继续尝试其他目录
         }
@@ -192,7 +217,7 @@ bool FileScanner::scan_directory_recursive(const std::string& current_dir, bool 
                         }
                     }
                     
-                    if (!scan_directory_recursive(entry.path().string(), db_operation, visited_paths)) {
+                    if (!scan_directory_recursive(entry.path().string(), visited_paths)) {
                         std::cerr << "子目录扫描失败:" << entry.path().string() << std::endl;
                         // 继续扫描其他目录，不立即返回
                     }
@@ -217,32 +242,27 @@ bool FileScanner::scan_directory_recursive(const std::string& current_dir, bool 
     }
 }
 
-bool FileScanner::scan_single_directory(const std::string& directory_path, bool db_operation) {
+bool FileScanner::scan_single_directory(const std::string& directory_path) {
     try {
         std::filesystem::path dir_path(directory_path);
         std::vector<FileInfo> existing_files;
         std::unordered_map<std::string, FileInfo> existing_paths;
-
-        report_progress(std::string("正在扫描 ") + directory_path.c_str() + std::string(" ..."));
         
         // 获取数据库中该目录的所有现有文件
-        if (db_operation) {
-            existing_files = file_db_->get_files_by_parent_directory(directory_path);
-            for (const auto& file : existing_files) {
-                existing_paths[file.file_path] = file;
-            }
+        existing_files = file_db_->get_files_by_parent_directory(directory_path);
+        for (const auto& file : existing_files) {
+            existing_paths[file.file_path] = file;
         }
-        
+
         // 扫描实际文件
         std::unordered_set<std::string> actual_paths;
+        // 记录跳过的目录
+        std::unordered_set<std::string> skipped_directories;  
 
         // 处理目录本身
         auto dir_info = get_directory_info(dir_path);
         if (dir_info) {
-            if (db_operation) {
-                file_db_->insert_file(*dir_info);
-            }
-            
+            file_db_->insert_file(*dir_info);
             total_file_count_++;
             actual_paths.insert(dir_path.string());
         }
@@ -255,9 +275,7 @@ bool FileScanner::scan_single_directory(const std::string& directory_path, bool 
                 if (entry.is_regular_file()) {
                     auto file_info = get_file_info(entry.path());
                     if (file_info) {
-                        if (db_operation) {
-                            file_db_->insert_file(*file_info);
-                        }
+                        file_db_->insert_file(*file_info);
                         total_file_count_++;
                         actual_paths.insert(entry.path().string());
                     }
@@ -265,6 +283,14 @@ bool FileScanner::scan_single_directory(const std::string& directory_path, bool 
                     // 检查是否应该排除该目录
                     if (should_exclude_directory(entry.path())) {
                         std::cout << "跳过排除目录:" << entry.path().string() << std::endl;
+                        skipped_directories.insert(entry.path().string());  // 记录跳过的目录
+                        
+                        // 立即删除这个跳过目录及其所有子内容
+                        if (file_db_->get_file(entry.path().string())) {
+                            file_db_->delete_files_by_path_prefix(entry.path().string());
+                            file_db_->delete_file(entry.path().string());
+                        }
+
                         continue;
                     }
                     // 目录会在递归中处理，这里只记录路径
@@ -289,9 +315,7 @@ bool FileScanner::scan_single_directory(const std::string& directory_path, bool 
             }
             
             for (const auto& file_path : paths_to_delete) {
-                if (db_operation) {
-                    file_db_->delete_file(file_path);
-                }
+                file_db_->delete_file(file_path);
             }
             
             if (paths_to_delete.size() > 0) {
@@ -398,26 +422,62 @@ std::string FileScanner::get_mime_type(const std::filesystem::path& file_path) {
 }
 
 void FileScanner::start_file_watcher() {
-    // 简化的文件监听器，实际应该使用inotify等系统API
-    watcher_thread_ = std::thread([this]() {
-        std::cout << "启动文件监听器: " << directory_path_ << std::endl;
+    if (!file_watcher_) {
+        file_watcher_ = std::make_unique<FileWatcher>();
         
-        // 这里应该实现真正的文件系统监控
-        // 为了简化，这里只是空实现
-        while (!stop_watching_) {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+        // 启动文件监控
+        if (file_watcher_->startWatching(directory_path_)) {
+            std::cout << "启动文件监听器: " << directory_path_ << std::endl;
+            is_watching_ = true;
+        } else {
+            std::cerr << "无法启动文件监听器: " << directory_path_ << std::endl;
+            file_watcher_.reset();
         }
-    });
-    
-    std::cout << "文件监听器已启动" << std::endl;
+    }
 }
 
 void FileScanner::stop_file_watcher() {
-    if (watcher_thread_.joinable()) {
-        stop_watching_ = true;
-        watcher_thread_.join();
+    if (file_watcher_) {
+        is_watching_ = false;
+        file_watcher_->stopWatching();
+        file_watcher_.reset();
         std::cout << "文件监听器已停止" << std::endl;
     }
+}
+
+bool FileScanner::on_file_changed(const std::string& path, const std::string& event_type) {
+    std::cout << "文件变化: [" << event_type << "] " << path << std::endl;
+
+    if (!is_watching_) {
+        return false;
+    }
+
+    try {
+        // 根据事件类型处理文件变化
+        if (event_type == "CREATE") {
+            if (!is_path_contains_excluded_directory(path)) {
+                auto file_info = get_file_info(path);
+                if (file_info) {
+                    file_db_->insert_file(*file_info);
+                }
+            }
+        } else if (event_type == "CREATE_DIR") {
+            if (!is_path_contains_excluded_directory(path) && !should_exclude_directory(path)) {
+                auto dir_info = get_directory_info(path);
+                if (dir_info) {
+                    file_db_->insert_file(*dir_info);
+                }
+            }
+        } else if (event_type == "DELETE") {
+            file_db_->delete_file(path);
+        } else if (event_type == "DELETE_DIR") {
+            file_db_->delete_files_by_path_prefix(path);
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "处理文件变化异常:" << path << "错误:" << e.what() << std::endl;
+    }
+
+    return true;
 }
 
 bool FileScanner::run() {

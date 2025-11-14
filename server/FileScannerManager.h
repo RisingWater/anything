@@ -28,6 +28,8 @@ public:
     bool removeScanner(const std::string& db_path, const std::string& directory_path);
     bool startScanner(const std::string& db_path, const std::string& directory_path);
     bool stopScanner(const std::string& db_path, const std::string& directory_path);
+
+    void onFileChange(const std::string& path, const std::string& type);
     
 private:
     FileScannerManager() = default;

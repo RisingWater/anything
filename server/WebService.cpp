@@ -4,6 +4,52 @@
 #include "FileScannerManager.h"
 #include "Utils.h"
 #include <iostream>
+#include <cassert>
+#include <string>
+
+static unsigned char FromHex(unsigned char x) {
+    if (x >= 'A' && x <= 'Z') return x - 'A' + 10;
+    if (x >= 'a' && x <= 'z') return x - 'a' + 10;
+    if (x >= '0' && x <= '9') return x - '0';
+    assert(false); // Invalid character
+    return 0;
+}
+
+static std::string UrlDecode(const std::string& str) {
+    std::string decoded;
+    size_t length = str.length();
+    for (size_t i = 0; i < length; ++i) {
+        if (str[i] == '+') {
+            decoded += ' ';
+        } else if (str[i] == '%') {
+            // 修复1：检查是否有足够的字符
+            if (i + 2 >= length) {
+                // 不是完整的 %XX 格式，按原样输出
+                decoded += str[i];
+                continue;
+            }
+            
+            // 修复2：检查是否是有效的十六进制字符
+            unsigned char char1 = str[i+1];
+            unsigned char char2 = str[i+2];
+            
+            if (!((char1 >= '0' && char1 <= '9') || (char1 >= 'A' && char1 <= 'F') || (char1 >= 'a' && char1 <= 'f')) ||
+                !((char2 >= '0' && char2 <= '9') || (char2 >= 'A' && char2 <= 'F') || (char2 >= 'a' && char2 <= 'f'))) {
+                // 不是有效的十六进制字符，按原样输出
+                decoded += str[i];
+                continue;
+            }
+            
+            unsigned char high = FromHex(char1);
+            unsigned char low = FromHex(char2);
+            decoded += high * 16 + low;
+            i += 2; // 跳过两个十六进制字符
+        } else {
+            decoded += str[i];
+        }
+    }
+    return decoded;
+}
 
 // 设置 CORS 头部的辅助函数
 static void set_cors_headers(crow::response& res) {
@@ -16,11 +62,14 @@ static void set_cors_headers(crow::response& res) {
 static crow::response create_error_response(const std::string& message) {
     crow::response res;
     res.code = 200;
+
     crow::json::wvalue error;
     error["result"] = "error";
     error["message"] = message;
     set_cors_headers(res);
     res.write(error.dump());
+
+    std::cout << message << std::endl;
     return res;
 }
 
@@ -125,6 +174,49 @@ crow::response WebService::get_filedb_objs(const std::string& uid, const std::st
     res.write(response.dump());
     
     return res;
+}
+
+// POST /api/audit/events - 处理audit消息
+crow::response WebService::audit_event(const crow::request& req)
+{
+    crow::response res;
+
+    // 添加请求日志
+    std::cout << "=== Received audit event request ===" << std::endl;
+    std::cout << "URL: " << req.url << std::endl;
+    std::cout << "Body: " << req.body << std::endl;
+    std::cout << "Content-Type: " << req.get_header_value("Content-Type") << std::endl;
+    std::cout << "====================================" << std::endl;
+
+    try {
+        // 解析 JSON 请求体
+        auto json = crow::json::load(req.body);
+        if (!json) {
+            return create_error_response("Invalid JSON");
+        }
+        
+        // 验证必需字段
+        if (!json.has("path") || !json.has("type")) {
+            return create_error_response("Missing required fields: 'path' and 'type'");
+        }
+
+        std::string path = json["path"].s();
+        std::string type = json["type"].s();
+
+        FileScannerManager::getInstance().onFileChange(path, type);
+
+        crow::json::wvalue response;
+        response["result"] = "ok";
+        set_cors_headers(res);
+        res.code = 200;
+        res.write(response.dump());
+
+        return res;
+
+    } catch (const std::exception& e) {
+        return create_error_response(std::string("Internal error: ") + e.what());
+    }
+
 }
 
 // 数据库操作函数 - 需要你来实现这些函数
@@ -251,8 +343,13 @@ int WebService::db_get_filedb_objs(const std::string& uid, const std::string& se
         return 0;
     }
 
+    // 使用 URL 解码
+    std::string decoded_search_text = UrlDecode(search_text);
+    std::cout << "原始搜索文本: " << search_text << std::endl;
+    std::cout << "解码后搜索文本: " << decoded_search_text << std::endl;
+
     int index = 0;
-    std::vector<FileInfo> files = filedb.search_files(search_text, "file_name");
+    std::vector<FileInfo> files = filedb.search_files(decoded_search_text, "file_name");
     for (const auto& file : files) {
         crow::json::wvalue file_json;
         file_json["id"] = file.id;

@@ -19,6 +19,9 @@ public:
     // GET /api/filedb/{uid}/{search_text} - 获取scan_obj列表
     crow::response get_filedb_objs(const std::string& uid, const std::string& search_text);
 
+    // POST /api/audit/events - 处理audit消息
+    crow::response audit_event(const crow::request& req);
+
 private:
     // 数据库操作函数声明（由你实现）
     int db_get_scan_objs(const std::string& uid,

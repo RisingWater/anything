@@ -56,12 +56,12 @@ bool FileDB::init_database() {
         "CREATE INDEX IF NOT EXISTS idx_mime_type ON file_info(mime_type)",
         "CREATE INDEX IF NOT EXISTS idx_parent_directory ON file_info(parent_directory)",
         "CREATE INDEX IF NOT EXISTS idx_is_directory ON file_info(is_directory)",
-        "PRAGMA synchronous = NORMAL"      // 平衡模式（默认FULL）
-        "PRAGMA journal_mode = WAL"        // 写前日志（比OFF安全）
-        "PRAGMA cache_size = 100000"       // 100MB缓存
-        "PRAGMA page_size = 4096"          // 保持默认页大小
-        "PRAGMA mmap_size = 268435456 "    // 256MB内存映射
-        "PRAGMA temp_store = MEMORY"       // 临时表在内存中
+        "PRAGMA synchronous = NORMAL",      // 平衡模式（默认FULL）
+        "PRAGMA journal_mode = WAL",        // 写前日志（比OFF安全）
+        "PRAGMA cache_size = 100000",       // 100MB缓存
+        "PRAGMA page_size = 4096",          // 保持默认页大小
+        "PRAGMA mmap_size = 268435456",    // 256MB内存映射
+        "PRAGMA temp_store = MEMORY",       // 临时表在内存中
     };
    
     std::cout << "SQLite优化设置完成" << std::endl;
@@ -298,6 +298,22 @@ bool FileDB::delete_file(const std::string& file_path) {
     }
     
     std::cerr << "文件记录删除失败: " << file_path << std::endl;
+    return false;
+}
+
+bool FileDB::delete_files_by_path_prefix(const std::string& path_prefix) {
+    if (!is_connected_) return false;
+    
+    std::string sql = "DELETE FROM file_info WHERE file_path LIKE ? || '%'";
+
+    std::vector<std::string> params = {path_prefix};
+    
+    if (execute_sql_with_params(sql, params)) {
+        std::cout << "递归删除目录记录成功: " << path_prefix << std::endl;
+        return true;
+    }
+    
+    std::cerr << "递归目录记录失败: " << path_prefix << std::endl;
     return false;
 }
 
@@ -544,6 +560,6 @@ void FileDB::close() {
         DBManager::getInstance().releaseConnection(db_conn_);
         db_conn_ = nullptr;
         is_connected_ = false;
-        std::cout << "数据库连接已关闭" << std::endl;
+        std::cout << "FileDB数据库连接已关闭" << std::endl;
     }
 }

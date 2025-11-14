@@ -1,5 +1,7 @@
 set(SERVER_TARGET anything_file_service)
 
+add_subdirectory(audisp-anything-plugin)
+
 # 查找SQLite3
 find_library(SQLITE3_LIB sqlite3)
 if(NOT SQLITE3_LIB)
@@ -20,6 +22,7 @@ set(SERVER_SOURCES
     Utils.cpp
     WebService.cpp
     FileScannerManager.cpp
+    FileWatcher.cpp
     main.cpp
     )
 
@@ -27,6 +30,8 @@ add_executable(${SERVER_TARGET} ${SERVER_SOURCES})
 
 target_link_libraries(${SERVER_TARGET}
     /usr/lib/x86_64-linux-gnu/libsqlite3.a
+    /usr/lib/x86_64-linux-gnu/libaudit.a
+    /usr/lib/x86_64-linux-gnu/libcap-ng.a
     stdc++fs
     pthread
     dl

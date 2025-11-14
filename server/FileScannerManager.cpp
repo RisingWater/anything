@@ -175,4 +175,16 @@ bool FileScannerManager::stopScanner(const std::string& db_path,
     return true;
 }
 
+void FileScannerManager::onFileChange(const std::string& path, const std::string& type)
+{
+    std::lock_guard<std::mutex> lock(scanners_mutex_);
+
+    for (auto it = scanners_.begin(); it != scanners_.end(); it++) {
+        if (it->second->directory_match(path)) {
+            if (it->second->on_file_changed(path, type)) {
+                break;
+            }
+        }
+    }
+}
 

@@ -12,6 +12,7 @@
 #include <filesystem>
 #include "FileDB.h"
 #include "ScanObject.h"
+#include "FileWatcher.h"
 
 class FileScanner {
 public:
@@ -23,22 +24,27 @@ public:
                 const std::unordered_set<std::string>& excluded_patterns = {});
     ~FileScanner();
 
-    // 设置进度回调
-    void setProgressCallback(ProgressCallback callback);
-    
     // 禁止拷贝
     FileScanner(const FileScanner&) = delete;
+
     FileScanner& operator=(const FileScanner&) = delete;
+
+    bool directory_match(const std::string &file_path);
+
+    bool scan_directory();
     
-    bool scan_directory(bool db_operation = true);
     bool run();
+    
     void close();
+
+    bool on_file_changed(const std::string& path, const std::string& event_type);
     
 private:
     bool should_rescan();
-    bool scan_directory_recursive(const std::string& current_dir, bool db_operation, std::unordered_set<std::string>& visited_paths);
-    bool scan_single_directory(const std::string& directory_path, bool db_operation);
+    bool scan_directory_recursive(const std::string& current_dir, std::unordered_set<std::string>& visited_paths);
+    bool scan_single_directory(const std::string& directory_path);
     bool should_exclude_directory(const std::filesystem::path& dir_path);
+    bool is_path_contains_excluded_directory(const std::filesystem::path& file_path);
     
     std::unique_ptr<FileInfo> get_file_info(const std::filesystem::path& file_path);
     std::unique_ptr<FileInfo> get_directory_info(const std::filesystem::path& dir_path);
@@ -46,12 +52,9 @@ private:
     
     void start_file_watcher();
     void stop_file_watcher();
-    void handle_file_changes();
     
     static std::string get_current_time();
     static double get_current_timestamp();
-
-    void report_progress(const std::string& message);
     
     std::string directory_path_;
     std::string db_path_;
@@ -61,13 +64,13 @@ private:
     std::unique_ptr<ScanObject> scan_obj_;
     
     std::thread watcher_thread_;
-    std::atomic<bool> stop_watching_;
+    std::atomic<bool> is_watching_;
     
     static const std::unordered_set<std::string> DEFAULT_EXCLUDED_DIRS;
 
-    ProgressCallback progress_callback_;
-
     int total_file_count_;
+
+    std::unique_ptr<FileWatcher> file_watcher_;
 };
 
 #endif // FILESCANNER_H

@@ -37,6 +37,7 @@ public:
     bool update_file(const std::string& file_path, const FileInfo& file_info);
     bool delete_file(const std::string& file_path);
     bool delete_files_by_directory(const std::string& directory_path);
+    bool delete_files_by_path_prefix(const std::string& path_prefix);
 
     bool begin_transaction();
     bool commit_transaction();
