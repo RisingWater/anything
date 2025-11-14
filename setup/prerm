@@ -1,4 +1,6 @@
 #!/bin/bash
 
+pkill /opt/apps/com.anything/files/bin/anything
+
 systemctl stop anything-file.service
 systemctl disable anything-file.service
