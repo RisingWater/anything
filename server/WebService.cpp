@@ -162,11 +162,17 @@ crow::response WebService::get_filedb_objs(const std::string& uid, const std::st
     crow::json::wvalue result;
     std::string error_msg;
 
-    int count = db_get_filedb_objs(uid, search_text, result, error_msg);
+    // 使用 URL 解码
+    std::string decoded_search_text = UrlDecode(search_text);
+    std::cout << "原始搜索文本: " << search_text << std::endl;
+    std::cout << "解码后搜索文本: " << decoded_search_text << std::endl;
+
+    int count = db_get_filedb_objs(uid, decoded_search_text, result, error_msg);
     
     // 获取数据成功
     crow::json::wvalue response;
     response["result"] = "ok";
+    response["search_text"] = decoded_search_text;
     response["count"] = count;
     response["filedb_objs"] = std::move(result);
     set_cors_headers(res);
@@ -336,13 +342,8 @@ int WebService::db_get_filedb_objs(const std::string& uid, const std::string& se
         return 0;
     }
 
-    // 使用 URL 解码
-    std::string decoded_search_text = UrlDecode(search_text);
-    std::cout << "原始搜索文本: " << search_text << std::endl;
-    std::cout << "解码后搜索文本: " << decoded_search_text << std::endl;
-
     int index = 0;
-    std::vector<FileInfo> files = filedb.search_files(decoded_search_text, "file_name");
+    std::vector<FileInfo> files = filedb.search_files(search_text, "file_name");
     for (const auto& file : files) {
         crow::json::wvalue file_json;
         file_json["id"] = file.id;

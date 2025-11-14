@@ -1,16 +1,13 @@
-#ifndef FILE_RESULT_TABLE_H
-#define FILE_RESULT_TABLE_H
+#ifndef FILERESULTTABLE_H
+#define FILERESULTTABLE_H
 
 #include <QTableWidget>
-#include <QHeaderView>
-#include <QFileInfo>
-#include <QDateTime>
-#include <QDesktopServices>
-#include <QUrl>
-#include <QIcon>
-#include <QMimeData>
-#include <QMimeDatabase>
-#include "FileContextMenu.h"
+#include <QString>
+#include <QList>
+#include <QVariantMap>
+
+class FileContextMenu;
+class HighlightDelegate;
 
 class FileResultTable : public QTableWidget
 {
@@ -18,8 +15,9 @@ class FileResultTable : public QTableWidget
 
 public:
     explicit FileResultTable(QWidget *parent = nullptr);
-    void setSearchResults(const QList<QVariantMap>& results);
+    void setSearchResults(const std::string& keyword, const QList<QVariantMap>& results);
     void clearResults();
+    QString getSelectedFilePath() const;
 
 protected:
     void contextMenuEvent(QContextMenuEvent *event) override;
@@ -28,12 +26,17 @@ private slots:
     void onItemDoubleClicked(QTableWidgetItem *item);
 
 private:
-    QString getSelectedFilePath() const;
     QIcon getFileIcon(const QString& filePath, bool isDirectory) const;
     QString formatFileSize(qint64 sizeBytes) const;
     QString formatDateTime(const QDateTime& dateTime) const;
-
-    FileContextMenu *contextMenu_;
+    
+    QString keyword_;
+    HighlightDelegate* nameDelegate_ = nullptr;
+    //HighlightDelegate* pathDelegate_ = nullptr;
+    
+    // 高亮颜色配置
+    QColor highlightColor_ = Qt::red;
+    bool highlightBold_ = true;
 };
 
-#endif // FILE_RESULT_TABLE_H
+#endif // FILERESULTTABLE_H

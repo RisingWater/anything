@@ -1,6 +1,19 @@
 #include "FileResultTable.h"
 #include <QDebug>
 #include <QContextMenuEvent>
+#include <QHeaderView>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QMimeDatabase>
+#include <QRegExp>
+#include <QPainter>
+#include <QApplication>
+#include <QStyle>
+#include <QFileInfo>
+#include <QDateTime>
+#include <QMimeType>
+#include "HighlightDelegate.h"
+#include "FileContextMenu.h"
 
 FileResultTable::FileResultTable(QWidget *parent)
     : QTableWidget(parent)
@@ -22,13 +35,20 @@ FileResultTable::FileResultTable(QWidget *parent)
     
     // 设置列宽
     horizontalHeader()->setDefaultAlignment(Qt::AlignLeft);
-    //horizontalHeader()->setStretchLastSection(true);
     horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
     setColumnWidth(2, 80);
     horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
     setColumnWidth(3, 150);
+    
+    // 创建高亮委托
+    nameDelegate_ = new HighlightDelegate("", Qt::red, true, this);
+    //pathDelegate_ = new HighlightDelegate("", Qt::red, true, this);
+    
+    // 为名称列和路径列设置委托
+    setItemDelegateForColumn(0, nameDelegate_);
+    //setItemDelegateForColumn(1, pathDelegate_);
     
     // 连接双击信号
     connect(this, &QTableWidget::itemDoubleClicked, this, &FileResultTable::onItemDoubleClicked);
@@ -52,9 +72,19 @@ void FileResultTable::contextMenuEvent(QContextMenuEvent *event)
     menu->deleteLater();
 }
 
-void FileResultTable::setSearchResults(const QList<QVariantMap>& results)
+void FileResultTable::setSearchResults(const std::string& keyword, const QList<QVariantMap>& results)
 {
     clearResults();
+
+    keyword_ = QString::fromStdString(keyword);
+    
+    // 更新委托的匹配模式
+    if (nameDelegate_) {
+        nameDelegate_->setPattern(keyword_);
+    }
+    //if (pathDelegate_) {
+    //    pathDelegate_->setPattern(keyword_);
+    //}
     
     setRowCount(results.size());
     
@@ -73,8 +103,9 @@ void FileResultTable::setSearchResults(const QList<QVariantMap>& results)
         nameItem->setToolTip(fileName);
         
         // 路径列
-        auto pathItem = new QTableWidgetItem(fileInfo.absolutePath());
-        pathItem->setToolTip(fileInfo.absolutePath());
+        QString absolutePath = fileInfo.absolutePath();
+        auto pathItem = new QTableWidgetItem(absolutePath);
+        pathItem->setToolTip(absolutePath);
         
         // 大小列
         QString sizeText = isDirectory ? QString() : formatFileSize(fileInfo.size());
@@ -86,7 +117,7 @@ void FileResultTable::setSearchResults(const QList<QVariantMap>& results)
         
         // 设置所有项的数据，用于排序
         nameItem->setData(Qt::UserRole + 1, fileName);
-        pathItem->setData(Qt::UserRole + 1, fileInfo.absolutePath());
+        pathItem->setData(Qt::UserRole + 1, absolutePath);
         sizeItem->setData(Qt::UserRole + 1, isDirectory ? -1 : fileInfo.size());
         timeItem->setData(Qt::UserRole + 1, fileInfo.lastModified());
         
@@ -95,18 +126,12 @@ void FileResultTable::setSearchResults(const QList<QVariantMap>& results)
         setItem(i, 2, sizeItem);
         setItem(i, 3, timeItem);
     }
-    
-    // 自动调整列宽
-    // resizeColumnsToContents();
 }
 
 void FileResultTable::clearResults()
 {
+    keyword_.clear();
     setRowCount(0);
-    // 确保表头保持正确
-    QStringList headers;
-    headers << "名称" << "路径" << "大小" << "修改时间";
-    setHorizontalHeaderLabels(headers);
 }
 
 void FileResultTable::onItemDoubleClicked(QTableWidgetItem *item)

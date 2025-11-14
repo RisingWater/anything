@@ -153,8 +153,6 @@ void FileSearchApp::onSearchFinished(QNetworkReply* reply) {
         QByteArray response_data = reply->readAll();
         QJsonDocument doc = QJsonDocument::fromJson(response_data);
         
-        qDebug() << "搜索响应:" << response_data;
-        
         if (doc.isObject()) {
             QJsonObject obj = doc.object();
             QString result = obj["result"].toString();
@@ -162,7 +160,7 @@ void FileSearchApp::onSearchFinished(QNetworkReply* reply) {
             if (result == "ok") {
                 int count = obj["count"].toInt();
                 QJsonArray files_array = obj["filedb_objs"].toArray();
-                
+                QString keyword = obj["search_text"].toString();
                 QList<QVariantMap> search_results;
                 
                 for (const QJsonValue& value : files_array) {
@@ -180,7 +178,7 @@ void FileSearchApp::onSearchFinished(QNetworkReply* reply) {
                     }
                 }
                 
-                displaySearchResults(search_results);
+                displaySearchResults(keyword.toStdString(), search_results);
                 status_label_->setText(QString("找到 %1 个结果").arg(count));
                 
             } else {
@@ -201,8 +199,8 @@ void FileSearchApp::onSearchFinished(QNetworkReply* reply) {
     reply->deleteLater();
 }
 
-void FileSearchApp::displaySearchResults(const QList<QVariantMap>& results) {
-    result_table_->setSearchResults(results);
+void FileSearchApp::displaySearchResults(const std::string& keyword, const QList<QVariantMap>& results) {
+    result_table_->setSearchResults(keyword, results);
 }
 
 void FileSearchApp::closeEvent(QCloseEvent* event) {

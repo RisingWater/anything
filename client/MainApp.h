@@ -48,7 +48,7 @@ private:
     void setupMenu();
     void setupTrayIcon();
     void checkScanObjects();
-    void displaySearchResults(const QList<QVariantMap>& results);
+    void displaySearchResults(const std::string& keyword, const QList<QVariantMap>& results);
     
     QString api_url_;
     

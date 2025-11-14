@@ -13,6 +13,7 @@ set(CLIENT_SOURCES
     MainApp.cpp
     FileResultTable.cpp
     FileContextMenu.cpp
+    HighlightDelegate.cpp
     main.cpp
     ${QRC_SRCS}
 )
