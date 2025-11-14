@@ -45,6 +45,7 @@ private:
     bool scan_single_directory(const std::string& directory_path);
     bool should_exclude_directory(const std::filesystem::path& dir_path);
     bool is_path_contains_excluded_directory(const std::filesystem::path& file_path);
+    void scan_new_directory_recursive(const std::string& directory_path);
     
     std::unique_ptr<FileInfo> get_file_info(const std::filesystem::path& file_path);
     std::unique_ptr<FileInfo> get_directory_info(const std::filesystem::path& dir_path);

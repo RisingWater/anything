@@ -22,11 +22,13 @@ FileResultTable::FileResultTable(QWidget *parent)
     
     // 设置列宽
     horizontalHeader()->setDefaultAlignment(Qt::AlignLeft);
-    horizontalHeader()->setStretchLastSection(true);
+    //horizontalHeader()->setStretchLastSection(true);
     horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-    horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive);
-    horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
+    setColumnWidth(2, 80);
+    horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+    setColumnWidth(3, 150);
     
     // 连接双击信号
     connect(this, &QTableWidget::itemDoubleClicked, this, &FileResultTable::onItemDoubleClicked);
@@ -95,7 +97,7 @@ void FileResultTable::setSearchResults(const QList<QVariantMap>& results)
     }
     
     // 自动调整列宽
-    resizeColumnsToContents();
+    // resizeColumnsToContents();
 }
 
 void FileResultTable::clearResults()
@@ -143,21 +145,31 @@ QIcon FileResultTable::getFileIcon(const QString& filePath, bool isDirectory) co
         QString iconName = mimeType.iconName();
         QString mimeTypeName = mimeType.name();
 
-        if (mimeTypeName == "application/x-object" || 
-            mimeTypeName == "application/x-executable" ||
-            mimeTypeName == "application/x-sharedlib") {
-            // 二进制文件使用特定的图标
-            iconName = "application-x-executable";
-        } else if (mimeTypeName.startsWith("application/octet-stream")) {
-            // 未知二进制文件
-            iconName = "application-octet-stream";
-        }
+        QIcon icon = QIcon::fromTheme(iconName);
         
-        if (iconName.isEmpty()) {
-            iconName = "text-x-generic";
+        if (icon.isNull()) {
+            // 获取所有父类型
+            QStringList parentMimeTypes = mimeType.allAncestors();
+            
+            // 按优先级尝试父类型的图标
+            for (const QString& parentMimeType : parentMimeTypes) {
+                QMimeType parentType = mimeDb.mimeTypeForName(parentMimeType);
+                if (parentType.isValid()) {
+                    QString parentIconName = parentType.iconName();
+                    icon = QIcon::fromTheme(parentIconName);
+                    if (!icon.isNull()) {
+                        break;
+                    }
+                }
+            }
         }
-        
-        return QIcon::fromTheme(iconName, QIcon(":/icons/file.png"));
+
+        // 最后回退到默认文件图标
+        if (icon.isNull()) {
+            icon = QIcon(":/icons/file.png");
+        }
+
+        return icon;
     }
 }
 

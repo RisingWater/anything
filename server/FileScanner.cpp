@@ -466,6 +466,7 @@ bool FileScanner::on_file_changed(const std::string& path, const std::string& ev
                 auto dir_info = get_directory_info(path);
                 if (dir_info) {
                     file_db_->insert_file(*dir_info);
+                    scan_new_directory_recursive(path);
                 }
             }
         } else if (event_type == "DELETE") {
@@ -518,4 +519,53 @@ std::string FileScanner::get_current_time() {
 double FileScanner::get_current_timestamp() {
     auto now = std::chrono::system_clock::now();
     return std::chrono::duration_cast<std::chrono::duration<double>>(now.time_since_epoch()).count();
+}
+
+// 递归扫描新创建的目录及其所有子内容
+void FileScanner::scan_new_directory_recursive(const std::string& directory_path) {
+    try {
+        std::filesystem::path dir_path(directory_path);
+        
+        // 先处理当前目录下的所有条目
+        for (const auto& entry : std::filesystem::directory_iterator(dir_path, 
+                std::filesystem::directory_options::skip_permission_denied)) {
+            
+            try {
+                if (entry.is_regular_file()) {
+                    auto file_info = get_file_info(entry.path());
+                    if (file_info) {
+                        file_db_->insert_file(*file_info);
+                    }
+                } else if (entry.is_directory()) {
+                    std::string sub_dir_path = entry.path().string();
+                    
+                    // 检查是否应该排除该目录
+                    if (should_exclude_directory(entry.path())) {
+                        std::cout << "跳过排除目录:" << sub_dir_path << std::endl;
+                        continue;
+                    }
+                    
+                    // 处理子目录
+                    auto sub_dir_info = get_directory_info(entry.path());
+                    if (sub_dir_info) {
+                        file_db_->insert_file(*sub_dir_info);
+                    }
+                    
+                    // 递归扫描子目录
+                    scan_new_directory_recursive(sub_dir_path);
+                }
+            } catch (const std::filesystem::filesystem_error& e) {
+                std::cerr << "无法访问目录条目:" << entry.path().string() << "错误:" << e.what() << std::endl;
+                continue;
+            } catch (const std::exception& e) {
+                std::cerr << "处理目录条目异常:" << entry.path().string() << "错误:" << e.what() << std::endl;
+                continue;
+            }
+        }
+        
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::cerr << "递归扫描新目录失败:" << directory_path << "错误:" << e.what() << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "递归扫描新目录异常:" << directory_path << "错误:" << e.what() << std::endl;
+    }
 }
