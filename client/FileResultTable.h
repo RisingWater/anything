@@ -36,7 +36,7 @@ private:
     
     // 高亮颜色配置
     QColor highlightColor_ = Qt::red;
-    bool highlightBold_ = true;
+    bool highlightBold_ = false;
 };
 
 #endif // FILERESULTTABLE_H
