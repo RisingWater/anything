@@ -11,7 +11,7 @@ class HighlightDelegate : public QStyledItemDelegate
 public:
     explicit HighlightDelegate(const QString& pattern = "", 
                               const QColor& color = Qt::red, 
-                              bool bold = true, 
+                              bool bold = false, 
                               QObject* parent = nullptr);
     
     void setPattern(const QString& pattern);
