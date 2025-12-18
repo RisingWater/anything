@@ -14,14 +14,14 @@
 ### docker准备
 
 ```bash
+cd docker
 docker build -t anything-build .
 ```
 
 ### 进入docker
 
 ```
-docker run -it -d anything-build --name <container_name> /bin/bash
-docker exec -it <container_name> /bin/bash
+docker run -it --rm -v $HOME:/workdir anything-build /bin/bash  
 ```
 
 ### 构建代码

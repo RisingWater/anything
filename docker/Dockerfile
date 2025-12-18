@@ -1,5 +1,9 @@
 FROM ubuntu:18.04
 
+# 替换为阿里云源
+RUN sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list && \
+    sed -i 's/security.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list
+
 RUN apt-get update && apt-get install -y \
     sudo \
     git  \
