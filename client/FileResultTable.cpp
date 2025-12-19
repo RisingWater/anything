@@ -43,7 +43,7 @@ FileResultTable::FileResultTable(QWidget *parent)
     setColumnWidth(3, 150);
     
     // 创建高亮委托
-    nameDelegate_ = new HighlightDelegate("", Qt::red, true, this);
+    nameDelegate_ = new HighlightDelegate("", Qt::red, false, this);
     //pathDelegate_ = new HighlightDelegate("", Qt::red, true, this);
     
     // 为名称列和路径列设置委托

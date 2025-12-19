@@ -155,7 +155,7 @@ void HighlightDelegate::drawHighlightedText(QPainter* painter, const QRect& rect
     if (lastPos < text.length()) {
         QString after = text.mid(lastPos);
         int afterWidth = fmNormal.width(after);
-        QRect afterRect = rect.adjusted(fmNormal.width(text.left(lastPos)), 0, 0, 0);
+        QRect afterRect = rect.adjusted(fmHighlight.width(text.left(lastPos)), 0, 0, 0);
         afterRect.setWidth(afterWidth);
         painter->drawText(afterRect, Qt::AlignLeft | Qt::AlignVCenter, after);
     }
