@@ -25,10 +25,19 @@ public:
         }
     }
 
+    bool is_connected() {
+        return is_connected_;
+    }
+
+    void set_is_connected(bool is_connected) {
+        is_connected_ = is_connected;
+    }
+
 private:
     sqlite3* db_;
     std::string db_path_;
     std::atomic<int> ref_count_{0};
+    bool is_connected_;
 };
 
 class DBManager {

@@ -24,55 +24,63 @@ bool FileDB::init_database() {
         return false;
     }
     
-    is_connected_ = true;
-    std::cout << "数据库连接已建立: " << db_path_ << std::endl;
-    
-    // 创建表
-    const char* create_table_sql = 
-        "CREATE TABLE IF NOT EXISTS file_info ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-        "file_path TEXT NOT NULL UNIQUE,"
-        "file_name TEXT NOT NULL,"
-        "modified_time TEXT,"
-        "created_time TEXT,"
-        "file_extension TEXT,"
-        "mime_type TEXT,"
-        "is_directory INTEGER,"
-        "parent_directory TEXT,"
-        "last_scanned_time TEXT,"
-        "scan_count INTEGER DEFAULT 0"
-        ")";
-    
-    if (!execute_sql(create_table_sql)) {
-        std::cerr << "创建表失败" << std::endl;
-        return false;
-    }
-    
-    // 创建索引
-    std::vector<std::string> indexes = {
-        "CREATE INDEX IF NOT EXISTS idx_file_path ON file_info(file_path)",
-        "CREATE INDEX IF NOT EXISTS idx_file_name ON file_info(file_name)",
-        "CREATE INDEX IF NOT EXISTS idx_file_extension ON file_info(file_extension)",
-        "CREATE INDEX IF NOT EXISTS idx_mime_type ON file_info(mime_type)",
-        "CREATE INDEX IF NOT EXISTS idx_parent_directory ON file_info(parent_directory)",
-        "CREATE INDEX IF NOT EXISTS idx_is_directory ON file_info(is_directory)",
-        "PRAGMA synchronous = NORMAL",      // 平衡模式（默认FULL）
-        "PRAGMA journal_mode = WAL",        // 写前日志（比OFF安全）
-        "PRAGMA cache_size = 100000",       // 100MB缓存
-        "PRAGMA page_size = 4096",          // 保持默认页大小
-        "PRAGMA mmap_size = 268435456",    // 256MB内存映射
-        "PRAGMA temp_store = MEMORY",       // 临时表在内存中
-    };
-   
-    std::cout << "SQLite优化设置完成" << std::endl;
-    
-    for (const auto& index_sql : indexes) {
-        if (!execute_sql(index_sql)) {
-            std::cerr << "创建索引失败: " << index_sql << std::endl;
+    if (db_conn_->is_connected()) {
+        is_connected_ = true;
+        std::cout << "数据库已连接" << std::endl;
+    } else {
+        is_connected_ = true;
+        std::cout << "数据库连接已建立: " << db_path_ << std::endl;
+        
+        // 创建表
+        const char* create_table_sql = 
+            "CREATE TABLE IF NOT EXISTS file_info ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "file_path TEXT NOT NULL UNIQUE,"
+            "file_name TEXT NOT NULL,"
+            "modified_time TEXT,"
+            "created_time TEXT,"
+            "file_extension TEXT,"
+            "mime_type TEXT,"
+            "is_directory INTEGER,"
+            "parent_directory TEXT,"
+            "last_scanned_time TEXT,"
+            "scan_count INTEGER DEFAULT 0"
+            ")";
+        
+        if (!execute_sql(create_table_sql)) {
+            std::cerr << "创建表失败" << std::endl;
+            is_connected_ = false;
+            return false;
         }
-    }
+        
+        // 创建索引
+        std::vector<std::string> indexes = {
+            "CREATE INDEX IF NOT EXISTS idx_file_path ON file_info(file_path)",
+            "CREATE INDEX IF NOT EXISTS idx_file_name ON file_info(file_name)",
+            "CREATE INDEX IF NOT EXISTS idx_file_extension ON file_info(file_extension)",
+            "CREATE INDEX IF NOT EXISTS idx_mime_type ON file_info(mime_type)",
+            "CREATE INDEX IF NOT EXISTS idx_parent_directory ON file_info(parent_directory)",
+            "CREATE INDEX IF NOT EXISTS idx_is_directory ON file_info(is_directory)",
+            "PRAGMA synchronous = NORMAL",      // 平衡模式（默认FULL）
+            "PRAGMA journal_mode = WAL",        // 写前日志（比OFF安全）
+            "PRAGMA cache_size = 100000",       // 100MB缓存
+            "PRAGMA page_size = 4096",          // 保持默认页大小
+            "PRAGMA mmap_size = 268435456",    // 256MB内存映射
+            "PRAGMA temp_store = MEMORY",       // 临时表在内存中
+        };
     
-    std::cout << "数据库表结构初始化完成" << std::endl;
+        std::cout << "SQLite优化设置完成" << std::endl;
+        
+        for (const auto& index_sql : indexes) {
+            if (!execute_sql(index_sql)) {
+                std::cerr << "创建索引失败: " << index_sql << std::endl;
+            }
+        }
+
+        db_conn_->set_is_connected(true);
+        
+        std::cout << "数据库表结构初始化完成" << std::endl;
+    }
     return true;
 }
 
@@ -562,4 +570,241 @@ void FileDB::close() {
         is_connected_ = false;
         std::cout << "FileDB数据库连接已关闭" << std::endl;
     }
+}
+
+std::string FileDB::start_search_task(const std::string& search_term,
+                                     const std::string& search_field,
+                                     int &max_file_count,
+                                     int limit) {
+    std::vector<std::string> valid_fields = {
+        "file_name", "file_path", "file_extension", "mime_type", "parent_directory"
+    };
+    
+    if (std::find(valid_fields.begin(), valid_fields.end(), search_field) == valid_fields.end()) {
+        throw std::invalid_argument("无效的搜索字段: " + search_field);
+    }
+    
+    // 生成唯一任务ID
+    std::string task_id = "search_" + std::to_string(next_task_id_);
+
+    next_task_id_++;
+    
+    auto task = std::make_unique<SearchTask>();
+    task->task_id = task_id;
+    task->search_term = search_term;
+    task->search_field = search_field;
+    task->limit = limit;  // 总限制，-1表示无限制
+    task->pattern = "%" + search_term + "%";
+    task->created_time = std::chrono::system_clock::now();
+    task->status = SearchStatus::PENDING;
+    task->total_results = 0;
+    
+    // 获取当前最大ID，用于判断搜索范围
+    task->current_min_id = 1;
+    task->max_id = get_max_id();
+
+    max_file_count = task->max_id;
+    
+    {
+        std::lock_guard<std::mutex> lock(task_mutex_);
+        search_tasks_[task_id] = std::move(task);
+    }
+    
+    return task_id;
+}
+
+std::vector<FileInfo> FileDB::get_search_batch(const std::string& task_id, 
+                                              int batch_size) {
+    std::vector<FileInfo> results;
+    
+    std::unique_ptr<SearchTask> task;
+    {
+        std::lock_guard<std::mutex> lock(task_mutex_);
+        auto it = search_tasks_.find(task_id);
+        if (it == search_tasks_.end()) {
+            std::cerr << "任务不存在: " << task_id << std::endl;
+            return results;
+        }
+        task = std::move(it->second);
+    }
+    
+    if (task->status == SearchStatus::CANCELLED) {
+        std::cerr << "任务已取消" << std::endl;
+        return results;
+    }
+    
+    if (task->status == SearchStatus::COMPLETED) {
+        std::cerr << "任务已完成" << std::endl;
+        return results;
+    }
+    
+    // 检查是否还有需要查询的范围
+    if (task->current_min_id > task->max_id) {
+        task->status = SearchStatus::COMPLETED;
+        return results;
+    }
+    
+    // 检查是否达到总限制
+    if (task->limit > 0 && task->total_results >= task->limit) {
+        task->status = SearchStatus::COMPLETED;
+        return results;
+    }
+    
+    task->status = SearchStatus::RUNNING;
+    
+    if (!is_connected_) {
+        task->status = SearchStatus::ERROR;
+        return results;
+    }
+    
+    std::lock_guard<std::mutex> lock(operation_mutex_);
+    
+    try {
+        // 计算本次查询的实际ID范围
+        int current_max_id = task->current_min_id + batch_size - 1;
+        if (current_max_id > task->max_id) {
+            current_max_id = task->max_id;
+        }
+        
+        // 计算本次最多返回多少条（考虑总限制）
+        int max_return = batch_size;
+        if (task->limit > 0) {
+            int remaining = task->limit - task->total_results;
+            max_return = std::min(batch_size, remaining);
+        }
+        
+        // 构建SQL：按ID范围查询
+        std::string sql = "SELECT * FROM file_info WHERE "
+                         "id BETWEEN ? AND ? AND "
+                         + task->search_field + " LIKE ? "
+                         "LIMIT ?";
+        
+        sqlite3_stmt* stmt;
+        int rc = sqlite3_prepare_v2(db_conn_->get(), sql.c_str(), -1, &stmt, nullptr);
+        
+        if (rc != SQLITE_OK) {
+            std::cerr << "准备SQL语句失败: " << sqlite3_errmsg(db_conn_->get()) << std::endl;
+            task->status = SearchStatus::ERROR;
+            return results;
+        }
+        
+        // 绑定参数
+        sqlite3_bind_int(stmt, 1, task->current_min_id);      // 起始ID
+        sqlite3_bind_int(stmt, 2, current_max_id);            // 结束ID
+        sqlite3_bind_text(stmt, 3, task->pattern.c_str(), -1, SQLITE_TRANSIENT);  // 搜索条件
+        sqlite3_bind_int(stmt, 4, max_return);                // 返回限制
+        
+        // 执行查询并获取数据
+        int count = 0;
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            FileInfo file_info;
+            file_info.id = sqlite3_column_int(stmt, 0);
+            file_info.file_path = reinterpret_cast<const char*>(
+                sqlite3_column_text(stmt, 1));
+            file_info.file_name = reinterpret_cast<const char*>(
+                sqlite3_column_text(stmt, 2));
+            file_info.modified_time = reinterpret_cast<const char*>(
+                sqlite3_column_text(stmt, 3));
+            file_info.created_time = reinterpret_cast<const char*>(
+                sqlite3_column_text(stmt, 4));
+            file_info.file_extension = reinterpret_cast<const char*>(
+                sqlite3_column_text(stmt, 5));
+            file_info.mime_type = reinterpret_cast<const char*>(
+                sqlite3_column_text(stmt, 6));
+            file_info.is_directory = sqlite3_column_int(stmt, 7);
+            file_info.parent_directory = reinterpret_cast<const char*>(
+                sqlite3_column_text(stmt, 8));
+            file_info.last_scanned_time = reinterpret_cast<const char*>(
+                sqlite3_column_text(stmt, 9));
+            file_info.scan_count = sqlite3_column_int(stmt, 10);
+            
+            results.push_back(file_info);
+            count++;
+        }
+        
+        sqlite3_finalize(stmt);
+        
+        // 更新任务状态
+        task->total_results += count;
+        
+        // 移动ID范围指针
+        task->current_min_id = current_max_id + 1;
+        
+        // 判断任务是否完成
+        if (task->current_min_id > task->max_id) {
+            // ID范围已遍历完
+            task->status = SearchStatus::COMPLETED;
+        } else if (task->limit > 0 && task->total_results >= task->limit) {
+            // 达到总限制
+            task->status = SearchStatus::COMPLETED;
+        } else if (count == 0) {
+            // 当前范围没有匹配，但还有后续范围
+            // 继续下一个范围
+            task->status = SearchStatus::PENDING;
+        } else {
+            // 还有更多数据
+            task->status = SearchStatus::PENDING;
+        }
+        
+    } catch (const std::exception& e) {
+        std::cerr << "搜索过程中出错: " << e.what() << std::endl;
+        task->status = SearchStatus::ERROR;
+    }
+    
+    // 保存任务状态
+    {
+        std::lock_guard<std::mutex> lock(task_mutex_);
+        search_tasks_[task_id] = std::move(task);
+    }
+    
+    return results;
+}
+
+// 辅助函数：获取最大ID
+int FileDB::get_max_id() {
+    if (!is_connected_) return 0;
+    
+    std::lock_guard<std::mutex> lock(operation_mutex_);
+    
+    sqlite3_stmt* stmt;
+    int max_id = 0;
+    
+    if (sqlite3_prepare_v2(db_conn_->get(), 
+                          "SELECT MAX(id) FROM file_info", 
+                          -1, &stmt, nullptr) == SQLITE_OK) {
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            max_id = sqlite3_column_int(stmt, 0);
+        }
+        sqlite3_finalize(stmt);
+    }
+    
+    return max_id;
+}
+
+// 获取任务状态
+SearchStatus FileDB::get_task_status(const std::string& task_id) {
+    std::lock_guard<std::mutex> lock(task_mutex_);
+    auto it = search_tasks_.find(task_id);
+    if (it == search_tasks_.end()) {
+        return SearchStatus::ERROR;
+    }
+    return it->second->status;
+}
+
+// 取消任务
+bool FileDB::cancel_search_task(const std::string& task_id) {
+    std::lock_guard<std::mutex> lock(task_mutex_);
+    auto it = search_tasks_.find(task_id);
+    if (it == search_tasks_.end()) {
+        return false;
+    }
+    
+    it->second->status = SearchStatus::CANCELLED;
+    return true;
+}
+
+// 清理任务（手动或自动清理）
+void FileDB::cleanup_task(const std::string& task_id) {
+    std::lock_guard<std::mutex> lock(task_mutex_);
+    search_tasks_.erase(task_id);
 }

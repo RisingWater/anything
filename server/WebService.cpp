@@ -182,6 +182,80 @@ crow::response WebService::get_filedb_objs(const std::string& uid, const std::st
     return res;
 }
 
+// POST /api/filedb/{uid}/task/{search_text} - 创建查找任务，获取task_id
+crow::response WebService::create_search_task(const std::string& uid, const std::string& search_text)
+{
+    int max_file_count = 0;
+    crow::response res;
+    std::string error_msg;
+
+    // 使用 URL 解码
+    std::string decoded_search_text = UrlDecode(search_text);
+    std::cout << "原始搜索文本: " << search_text << std::endl;
+    std::cout << "解码后搜索文本: " << decoded_search_text << std::endl;
+
+    std::string task_id = db_create_search_task(uid, decoded_search_text, max_file_count, error_msg);
+
+    if (!task_id.empty()) {
+        crow::json::wvalue response;
+        response["result"] = "ok";
+        response["search_text"] = decoded_search_text;
+        response["task_id"] = task_id;
+        response["max_file_count"] = max_file_count;
+        set_cors_headers(res);
+        res.code = 200;
+        res.write(response.dump());
+    } else {
+        res = create_error_response(std::string("Failed to create search task, error message: ") + error_msg);
+    }
+
+    return res;
+}
+
+// GET /api/filedb/{uid}/task/{task_id} - 获取查找任务，获取task_id的一部分查找结果，与查找状态
+crow::response WebService::get_search_task(const std::string& uid, const std::string& task_id)
+{
+    crow::response res;
+    crow::json::wvalue result;
+    std::string error_msg;
+    bool is_finished = false;
+
+    int count = db_get_search_task(uid, task_id, result, is_finished, error_msg);
+
+    // 获取数据成功
+    crow::json::wvalue response;
+    response["result"] = "ok";
+    response["task_id"] = task_id;
+    response["is_finished"] = is_finished;
+    response["count"] = count;
+    response["filedb_objs"] = std::move(result);
+    set_cors_headers(res);
+    res.code = 200;
+    res.write(response.dump());
+    
+    return res;    
+}
+
+// DELETE /api/filedb/{uid}/task/{task_id} - 删除查找任务
+crow::response WebService::delete_search_task(const std::string& uid, const std::string& task_id)
+{
+    crow::response res;
+    std::string error_msg;
+
+    db_delete_search_task(uid, task_id, error_msg);
+
+     // 获取数据成功
+    crow::json::wvalue response;
+    response["result"] = "ok";
+    response["task_id"] = task_id;
+
+    set_cors_headers(res);
+    res.code = 200;
+    res.write(response.dump());
+    
+    return res;    
+}
+
 // POST /api/audit/events - 处理audit消息
 crow::response WebService::audit_event(const crow::request& req)
 {
@@ -225,6 +299,7 @@ int WebService::db_get_scan_objs(const std::string& uid, crow::json::wvalue& res
     result = crow::json::wvalue();
 
     if (!std::filesystem::exists(db_path)) {
+        error_msg = "database file is not exist.";
         return 0;
     }
 
@@ -232,6 +307,7 @@ int WebService::db_get_scan_objs(const std::string& uid, crow::json::wvalue& res
     ScanObject scan_object(db_path);
 
     if (!scan_object.init_database()) {
+        error_msg = "Failed to initialize database.";
         return 0;
     }
 
@@ -306,6 +382,12 @@ bool WebService::db_add_scan_obj(const std::string& uid, const std::string& path
 bool WebService::db_delete_scan_obj(const std::string& uid, const std::string& id, 
                                    crow::json::wvalue& result, std::string& error_msg) {
     std::string db_path = get_db_path_by_uid(uid);
+
+    if (!std::filesystem::exists(db_path)) {
+        error_msg = "database file is not exist.";
+        return false;
+    }
+
     // 现在处理数据库操作
     ScanObject scan_object(db_path);
     if (!scan_object.init_database()) {
@@ -329,21 +411,17 @@ bool WebService::db_delete_scan_obj(const std::string& uid, const std::string& i
 
 int WebService::db_get_filedb_objs(const std::string& uid, const std::string& search_text, 
                                    crow::json::wvalue& result, std::string& error_msg) {
-    std::string db_path = get_db_path_by_uid(uid);
     result = crow::json::wvalue();
 
-    if (!std::filesystem::exists(db_path)) {
-        return 0;
-    }
-
-    // 现在处理数据库操作
-    FileDB filedb(db_path);
-    if (!filedb.init_database()) {
+    std::shared_ptr<FileDB> filedb = get_db(uid);
+    // 初始化数据库
+    if (filedb == nullptr) {
+        error_msg = "Failed to initialize database.";
         return 0;
     }
 
     int index = 0;
-    std::vector<FileInfo> files = filedb.search_files(search_text, "file_name");
+    std::vector<FileInfo> files = filedb->search_files(search_text, "file_name");
     for (const auto& file : files) {
         crow::json::wvalue file_json;
         file_json["id"] = file.id;
@@ -358,4 +436,112 @@ int WebService::db_get_filedb_objs(const std::string& uid, const std::string& se
 
     return index;
 }
-                                 
+
+std::string WebService::db_create_search_task(const std::string& uid, 
+    const std::string& decoded_search_text,
+    int &max_file_count,
+    std::string &error_msg)
+{
+    std::shared_ptr<FileDB> filedb = get_db(uid);
+    // 初始化数据库
+    if (filedb == nullptr) {
+        error_msg = "Failed to initialize database.";
+        return std::string();
+    }
+
+    // 这里应该指定搜索字段，默认为"file_name"
+    return filedb->start_search_task(decoded_search_text, "file_name", max_file_count);
+}
+
+int WebService::db_get_search_task(const std::string& uid,
+    const std::string& task_id,
+    crow::json::wvalue& result,
+    bool &is_finished,
+    std::string &error_msg)
+{
+    int index = 0;
+    std::shared_ptr<FileDB> filedb = get_db(uid);
+    // 初始化数据库
+    if (filedb == nullptr) {
+        error_msg = "Failed to initialize database.";
+        return -1;
+    }
+    
+    // 检查任务状态
+    SearchStatus status = filedb->get_task_status(task_id);
+    if (status == SearchStatus::ERROR) {
+        error_msg = "Task not found or error occurred.";
+        return -1;
+    }
+
+    // 判断是否完成
+    is_finished = (status == SearchStatus::COMPLETED ||
+                   status == SearchStatus::CANCELLED);
+
+    // 获取一批结果（例如每次100条）
+    std::vector<FileInfo> batch_results;
+    if (!is_finished) {
+        batch_results = filedb->get_search_batch(task_id);
+        for (const auto& file : batch_results) {
+            crow::json::wvalue file_json;
+            file_json["id"] = file.id;
+            file_json["file_name"] = file.file_name;
+            file_json["file_path"] = file.file_path;
+            file_json["file_extension"] = file.file_extension;
+            file_json["mime_type"] = file.mime_type;
+            file_json["is_directory"] = file.is_directory;
+
+            result[index++] = std::move(file_json);
+        }
+    } else {
+        filedb->cleanup_task(task_id);
+    }
+
+    return index;
+
+}
+
+void WebService::db_delete_search_task(const std::string& uid,
+    const std::string& task_id,
+    std::string &error_msg)
+{
+    std::shared_ptr<FileDB> filedb = get_db(uid);
+
+    // 初始化数据库
+    if (filedb == nullptr) {
+        error_msg = "Failed to initialize database.";
+        return;
+    }
+
+    // 取消任务
+    if (!filedb->cancel_search_task(task_id)) {
+        error_msg = "Failed to cancel task. Task may not exist.";
+        return;
+    }
+
+    // 清理任务资源
+    filedb->cleanup_task(task_id);
+    
+    return;
+}
+
+std::shared_ptr<FileDB> WebService::get_db(const std::string& uid)
+{
+    std::lock_guard<std::mutex> lock(db_map_mutex_);
+
+    auto it = db_map_.find(uid);
+    if (it != db_map_.end()) {
+        return it->second;
+    }
+
+    auto db = std::make_shared<FileDB>(get_db_path_by_uid(uid));
+    if (db->init_database())
+    {
+        db_map_[uid] = db;
+        return db;
+    }
+    else
+    {
+        return nullptr;
+    }
+}

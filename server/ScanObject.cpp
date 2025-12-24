@@ -18,40 +18,48 @@ bool ScanObject::init_database() {
         std::cerr << "无法打开数据库: " << std::endl;
         return false;
     }
-    
-    is_connected_ = true;
-    std::cout << "扫描对象数据库连接已建立: " << db_path_ << std::endl;
-    
-    // 创建表
-    const char* create_table_sql = 
-        "CREATE TABLE IF NOT EXISTS scan_objects ("
-        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-        "directory_path TEXT NOT NULL UNIQUE,"
-        "display_name TEXT,"
-        "description TEXT,"
-        "is_active INTEGER DEFAULT 1,"
-        "is_recursive INTEGER DEFAULT 1,"
-        "last_successful_scan_time TEXT"
-        ")";
-    
-    if (!execute_sql(create_table_sql)) {
-        std::cerr << "创建表失败" << std::endl;
-        return false;
-    }
-    
-    // 创建索引
-    std::vector<std::string> indexes = {
-        "CREATE INDEX IF NOT EXISTS idx_scan_objects_path ON scan_objects(directory_path)",
-        "CREATE INDEX IF NOT EXISTS idx_scan_objects_active ON scan_objects(is_active)"
-    };
-    
-    for (const auto& index_sql : indexes) {
-        if (!execute_sql(index_sql)) {
-            std::cerr << "创建索引失败: " << index_sql << std::endl;
+
+    if (db_conn_->is_connected()) {
+        is_connected_ = true;
+        std::cout << "已连接数据库: " << db_path_ << std::endl;
+    } else {
+        is_connected_ = true;
+        std::cout << "扫描对象数据库连接已建立: " << db_path_ << std::endl;
+        
+        // 创建表
+        const char* create_table_sql = 
+            "CREATE TABLE IF NOT EXISTS scan_objects ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "directory_path TEXT NOT NULL UNIQUE,"
+            "display_name TEXT,"
+            "description TEXT,"
+            "is_active INTEGER DEFAULT 1,"
+            "is_recursive INTEGER DEFAULT 1,"
+            "last_successful_scan_time TEXT"
+            ")";
+        
+        if (!execute_sql(create_table_sql)) {
+            std::cerr << "创建表失败" << std::endl;
+            is_connected_ = false;
+            return false;
         }
+        
+        // 创建索引
+        std::vector<std::string> indexes = {
+            "CREATE INDEX IF NOT EXISTS idx_scan_objects_path ON scan_objects(directory_path)",
+            "CREATE INDEX IF NOT EXISTS idx_scan_objects_active ON scan_objects(is_active)"
+        };
+        
+        for (const auto& index_sql : indexes) {
+            if (!execute_sql(index_sql)) {
+                std::cerr << "创建索引失败: " << index_sql << std::endl;
+            }
+        }
+
+        db_conn_->set_is_connected(true);
+        
+        std::cout << "扫描对象表结构初始化完成" << std::endl;
     }
-    
-    std::cout << "扫描对象表结构初始化完成" << std::endl;
     return true;
 }
 

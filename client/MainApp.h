@@ -8,6 +8,7 @@
 #include <QDialog>
 #include <QList>
 #include <QTimer>
+#include <QProgressBar>
 #include "FileResultTable.h"
 #include <QSystemTrayIcon>
 #include <QNetworkAccessManager>
@@ -35,30 +36,50 @@ public:
     
 protected:
     void closeEvent(QCloseEvent* event) override;
-    
+
+signals:
+    void refreshSearchResults(QString task_id);
+
 private slots:
     void showScanObjDialog();
     void onSearchTextChanged(const QString& text);
     void performSearch();
     void onTrayIconActivated(QSystemTrayIcon::ActivationReason reason);
-    void onSearchFinished(QNetworkReply* reply);
-    
+    void onCreateTaskFinished(QNetworkReply* reply);
+    void onFetchBatchFinished(QNetworkReply* reply);
+    void cancelCurrentSearch();
+    void refreshSearchResultsSlot(QString task_id);
+
 private:
     void setupUI();
     void setupMenu();
     void setupTrayIcon();
     void checkScanObjects();
-    void displaySearchResults(const std::string& keyword, const QList<QVariantMap>& results);
-    
+    void setSearchKeyword(const std::string& keyword);
+    void addSearchResults(const QList<QVariantMap>& results);
+    void processBatchResults(const QJsonArray& files_array);
+
+    void clearSearchStatus();    
+    void showSearchStatus(const QString& task_id, int max_file_count);
+    void updateSearchStatus(int current_file_count);
     QString api_url_;
+    bool isSearching_;
     
     // UI组件
     QLineEdit* search_input_;
     FileResultTable* result_table_;
     QLabel* status_label_;
+    QProgressBar* progress_bar_;
     QTimer* search_timer_;
 
     QSystemTrayIcon* trayIcon_;
+    QString currentSearchText_;
+    QString currentTaskId_;
+
+    int currentId_;
+    int currentMaxId_;
+
+    QNetworkAccessManager* networkManager_;
 };
 
 #endif // MAINGUI_H

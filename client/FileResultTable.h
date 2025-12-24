@@ -15,7 +15,8 @@ class FileResultTable : public QTableWidget
 
 public:
     explicit FileResultTable(QWidget *parent = nullptr);
-    void setSearchResults(const std::string& keyword, const QList<QVariantMap>& results);
+    void setSearchKeyword(const std::string& keyword);
+    void addSearchResults(const QList<QVariantMap>& results);
     void clearResults();
     QString getSelectedFilePath() const;
 
@@ -29,6 +30,8 @@ private:
     QIcon getFileIcon(const QString& filePath, bool isDirectory) const;
     QString formatFileSize(qint64 sizeBytes) const;
     QString formatDateTime(const QDateTime& dateTime) const;
+
+    void processBatchResults(const QJsonArray& files_array);
     
     QString keyword_;
     HighlightDelegate* nameDelegate_ = nullptr;

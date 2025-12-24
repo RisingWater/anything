@@ -31,9 +31,14 @@ FileSearchApp::FileSearchApp(QWidget* parent) :
     setupMenu();
     setupTrayIcon();
 
+    networkManager_ = new QNetworkAccessManager(this);
+
     search_timer_->setSingleShot(true);  // 单次触发
     search_timer_->setInterval(500);     // 500毫秒延迟
     connect(search_timer_, &QTimer::timeout, this, &FileSearchApp::performSearch);
+
+    currentId_ = 0;
+    currentMaxId_ = 0;
 }
 
 FileSearchApp::~FileSearchApp() {
@@ -60,24 +65,42 @@ void FileSearchApp::setupUI() {
     search_input_->setPlaceholderText("输入文件名、路径或扩展名进行搜索...");
     connect(search_input_, &QLineEdit::textChanged, this, &FileSearchApp::onSearchTextChanged);
     connect(search_input_, &QLineEdit::returnPressed, this, &FileSearchApp::performSearch);
+
+    connect(this, &FileSearchApp::refreshSearchResults, this, &FileSearchApp::refreshSearchResultsSlot);
     
     search_layout->addWidget(search_input_);
+    search_layout->setContentsMargins(5, 0, 5, 0); // 移除边距
     
     // 搜索结果列表
     result_table_ = new FileResultTable(this);
     
     // 主内容区域
-    auto main_content = new QWidget(this);
-    auto main_layout = new QVBoxLayout(main_content);
+    auto main_layout = new QVBoxLayout();
     main_layout->addWidget(result_table_);
+    main_layout->setContentsMargins(5, 0, 5, 0); // 移除边距
     
+    auto status_layout = new QHBoxLayout();
     // 状态栏
     status_label_ = new QLabel("就绪", this);
+    // 进度条
+    progress_bar_ = new QProgressBar(this);
+    progress_bar_->setFixedWidth(400);  // 设置固定宽度
+    progress_bar_->setFixedHeight(20);
+    progress_bar_->setVisible(false);   // 默认隐藏，搜索时显示
+    progress_bar_->setRange(0, 100);    // 设置范围0-100
+    progress_bar_->setTextVisible(true); // 显示百分比文本
+    progress_bar_->setAlignment(Qt::AlignCenter); // 文本居中
+    progress_bar_->setVisible(false);
+
+    status_layout->addWidget(status_label_);
+    status_layout->addStretch();
+    status_layout->addWidget(progress_bar_);
+    status_layout->setContentsMargins(5, 0, 5, 0); // 移除边距
     
     // 添加到主布局
     layout->addLayout(search_layout);
-    layout->addWidget(main_content);
-    layout->addWidget(status_label_);
+    layout->addLayout(main_layout);
+    layout->addLayout(status_layout);
 }
 
 void FileSearchApp::setupMenu() {
@@ -114,7 +137,8 @@ void FileSearchApp::onSearchTextChanged(const QString& text) {
     }
 }
 
-void FileSearchApp::performSearch() {
+void FileSearchApp::performSearch()
+{
     QString search_text = search_input_->text().trimmed();
     if (search_text.isEmpty()) {
         result_table_->clearResults();
@@ -122,33 +146,99 @@ void FileSearchApp::performSearch() {
         return;
     }
 
-    qDebug() << "searchText: " << search_text;
+    // 如果已经有搜索在进行，先取消
+    if (isSearching_ && !currentTaskId_.isEmpty()) {
+        cancelCurrentSearch();
+    }
+
+    qDebug() << "开始新的搜索: " << search_text;
     
     try {
-        // 使用 webapi
+        // 使用新的分批次搜索API
         QString uid = QString::number(getuid());
         QString encoded_search_text = QUrl::toPercentEncoding(search_text);
+
+        // 清空表格并设置搜索关键词
+        result_table_->setSearchKeyword(search_text.toStdString());
+        currentSearchText_ = search_text;
         
-        QUrl url(QString("%1/api/filedb/%2/%3").arg(SERVER_URL).arg(uid).arg(encoded_search_text));
+        // 创建搜索任务
+        QUrl url(QString("%1/api/filedb/%2/task/%3")
+                 .arg(SERVER_URL)
+                 .arg(uid)
+                 .arg(encoded_search_text));
+        
         QNetworkRequest request(url);
+        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         
-        QNetworkAccessManager* manager = new QNetworkAccessManager(this);
-        QNetworkReply* reply = manager->get(request);
+        QNetworkReply* reply = networkManager_->post(request, QByteArray());
         
         // 连接完成信号
-        connect(reply, &QNetworkReply::finished, this, [this, reply, manager]() {
-            onSearchFinished(reply);
-            manager->deleteLater();
+        connect(reply, &QNetworkReply::finished, this, 
+                [this, reply]() {
+            onCreateTaskFinished(reply);
         });
-        
-        status_label_->setText("搜索中...");
-        
+
+        isSearching_ = true;        
+        status_label_->setText("正在创建搜索任务...");        
     } catch (const std::exception& e) {
         QMessageBox::warning(this, "错误", QString("搜索失败: %1").arg(e.what()));
+        status_label_->setText("搜索失败");
     }
 }
 
-void FileSearchApp::onSearchFinished(QNetworkReply* reply) {
+void FileSearchApp::clearSearchStatus()
+{
+    isSearching_ = false;
+    currentTaskId_.clear();
+    currentId_ = 0;
+    currentMaxId_ = 0;
+    progress_bar_->setVisible(false);
+}
+
+void FileSearchApp::showSearchStatus(const QString& task_id, int max_file_count)
+{
+    currentTaskId_ = task_id;
+    currentId_ = 0;
+    currentMaxId_ = max_file_count;
+    progress_bar_->setVisible(true);
+}
+
+void FileSearchApp::updateSearchStatus(int add_file_count)
+{
+    currentId_ += add_file_count;
+    if (currentId_ > currentMaxId_)
+        currentId_ = currentMaxId_;
+
+    progress_bar_->setValue(currentId_ * 100 / currentMaxId_);
+}
+
+void FileSearchApp::cancelCurrentSearch()
+{    
+    if (!currentTaskId_.isEmpty() && isSearching_) {
+        // 发送DELETE请求取消任务
+        QString uid = QString::number(getuid());
+        QString encoded_task_id = QUrl::toPercentEncoding(currentTaskId_);
+        
+        QUrl url(QString("%1/api/filedb/%2/task/%3")
+                 .arg(SERVER_URL)
+                 .arg(uid)
+                 .arg(encoded_task_id));
+        
+        QNetworkRequest request(url);
+        QNetworkAccessManager manager;
+        QNetworkReply* reply = manager.deleteResource(request);
+        
+        // 可以异步处理取消，不需要等待结果
+        reply->deleteLater();
+    }
+    
+    clearSearchStatus();
+    status_label_->setText("搜索已取消");
+}
+
+void FileSearchApp::onCreateTaskFinished(QNetworkReply* reply)
+{
     if (reply->error() == QNetworkReply::NoError) {
         QByteArray response_data = reply->readAll();
         QJsonDocument doc = QJsonDocument::fromJson(response_data);
@@ -158,49 +248,172 @@ void FileSearchApp::onSearchFinished(QNetworkReply* reply) {
             QString result = obj["result"].toString();
             
             if (result == "ok") {
-                int count = obj["count"].toInt();
-                QJsonArray files_array = obj["filedb_objs"].toArray();
-                QString keyword = obj["search_text"].toString();
-                QList<QVariantMap> search_results;
+                // 获取任务ID
+                currentTaskId_ = obj["task_id"].toString();
                 
-                for (const QJsonValue& value : files_array) {
-                    if (value.isObject()) {
-                        QJsonObject file_obj = value.toObject();
-                        QVariantMap result;
-                        result["file_path"] = file_obj["file_path"].toString();
-                        result["file_name"] = file_obj["file_name"].toString();
-                        result["file_extension"] = file_obj["file_extension"].toString();
-                        result["mime_type"] = file_obj["mime_type"].toString();
-                        result["is_directory"] = file_obj["is_directory"].toBool();
-                        result["id"] = file_obj["id"].toInt();
-                        
-                        search_results.append(result);
-                    }
-                }
+                qDebug() << "创建搜索任务成功, task_id:" << currentTaskId_;
+
+                currentMaxId_ = obj["max_file_count"].toInt();
                 
-                displaySearchResults(keyword.toStdString(), search_results);
-                status_label_->setText(QString("找到 %1 个结果").arg(count));
+                //启动定时器获取下一批
+                showSearchStatus(currentTaskId_, currentMaxId_);
+                status_label_->setText("搜索中...");
+                //开始获取
+                emit refreshSearchResults(currentTaskId_);
                 
             } else {
                 QString errorMsg = obj["message"].toString();
-                QMessageBox::warning(this, "搜索失败", errorMsg);
-                status_label_->setText("搜索失败");
+                QMessageBox::warning(this, "创建任务失败", errorMsg);
+                status_label_->setText("创建任务失败");
+                clearSearchStatus();
             }
         } else {
             QMessageBox::warning(this, "错误", "服务器返回的数据格式不正确");
             status_label_->setText("数据格式错误");
+            clearSearchStatus();
         }
     } else {
         QMessageBox::warning(this, "网络错误", 
                            QString("网络请求失败: %1").arg(reply->errorString()));
         status_label_->setText("网络错误");
+        clearSearchStatus();
     }
     
     reply->deleteLater();
 }
 
-void FileSearchApp::displaySearchResults(const std::string& keyword, const QList<QVariantMap>& results) {
-    result_table_->setSearchResults(keyword, results);
+void FileSearchApp::refreshSearchResultsSlot(QString task_id)
+{
+    if (currentTaskId_.isEmpty() || !isSearching_ || currentTaskId_ != task_id)
+    {
+        qDebug() << "任务已取消或已切换任务";
+        return;
+    }
+    
+    QString uid = QString::number(getuid());
+    QString encoded_task_id = QUrl::toPercentEncoding(currentTaskId_);
+    
+    QUrl url(QString("%1/api/filedb/%2/task/%3")
+             .arg(SERVER_URL)
+             .arg(uid)
+             .arg(encoded_task_id));
+    
+    QNetworkRequest request(url);
+    
+    QNetworkReply* reply = networkManager_->get(request);
+
+    qDebug() << "开始获取下一批结果, task_id:" << currentTaskId_;
+    
+    connect(reply, &QNetworkReply::finished, this, 
+            [this, reply]() {
+        onFetchBatchFinished(reply);
+        reply->deleteLater();
+    });
+}
+
+void FileSearchApp::onFetchBatchFinished(QNetworkReply* reply)
+{
+    if (reply->error() == QNetworkReply::NoError)
+    {
+        qDebug() << "获取下一批结果成功, task_id:" << currentTaskId_;
+
+        QByteArray response_data = reply->readAll();
+        QJsonDocument doc = QJsonDocument::fromJson(response_data);
+        
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            QString result = obj["result"].toString();
+            QString task_id = obj["task_id"].toString();
+
+            if (task_id != currentTaskId_) {
+                //不是当前查找的task
+                qDebug() << "任务已取消或已切换任务";
+                return;
+            }
+            
+            if (result == "ok") {
+                updateSearchStatus(100000);
+                bool is_finished = obj["is_finished"].toBool();
+                // 处理批数据
+                QJsonArray files_array = obj["filedb_objs"].toArray();
+                if (!files_array.isEmpty()) {
+                    processBatchResults(files_array);
+                    
+                    // 更新状态显示
+                    int current_count = result_table_->rowCount();
+                    status_label_->setText(
+                        QString("已找到 %1 个文件")
+                        .arg(current_count)
+                    );
+                }
+                
+                // 如果搜索完成，停止定时器
+                if (is_finished) {
+                    qDebug() << "搜索完成, task_id:" << task_id;
+                    clearSearchStatus();
+                    int displayed_count = result_table_->rowCount();
+                    
+                    if (displayed_count == 0) {
+                        status_label_->setText("没有找到匹配的文件");
+                    } else {
+                        status_label_->setText(QString("搜索完成，共找到 %1 个文件").arg(displayed_count));
+                    }
+                }
+                else
+                {
+                    qDebug() << "搜索未完成, task_id:" << task_id;
+                    //开启下一个批次
+                    emit refreshSearchResults(task_id);
+                }
+            } else {
+                QString errorMsg = obj["message"].toString();
+                qDebug() << "获取批次失败:" << errorMsg;
+                clearSearchStatus();
+                status_label_->setText("获取数据失败");
+            }
+        }
+    } else {
+        qDebug() << "网络错误:" << reply->errorString();
+        clearSearchStatus();
+        status_label_->setText("网络错误");
+    }
+}
+
+void FileSearchApp::processBatchResults(const QJsonArray& files_array)
+{
+    QList<QVariantMap> search_results;
+
+    for (const QJsonValue& value : files_array) {
+        if (value.isObject()) {
+            QJsonObject file_obj = value.toObject();
+            QVariantMap result;
+            result["file_path"] = file_obj["file_path"].toString();
+            result["file_name"] = file_obj["file_name"].toString();
+            result["file_extension"] = file_obj["file_extension"].toString();
+            result["mime_type"] = file_obj["mime_type"].toString();
+            result["is_directory"] = file_obj["is_directory"].toBool();
+            result["id"] = file_obj["id"].toInt();
+
+            qDebug() << "文件路径:" << result["file_path"];
+                       
+            search_results.append(result);
+        }
+    }
+    
+    // 增量添加到表格
+    if (!search_results.isEmpty()) {
+        result_table_->addSearchResults(search_results);
+    }
+}
+
+void FileSearchApp::setSearchKeyword(const std::string& keyword)
+{
+    result_table_->setSearchKeyword(keyword);
+}
+
+void FileSearchApp::addSearchResults(const QList<QVariantMap>& results)
+{
+    result_table_->addSearchResults(results);
 }
 
 void FileSearchApp::closeEvent(QCloseEvent* event) {

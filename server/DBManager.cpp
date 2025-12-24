@@ -4,7 +4,8 @@
 
 // DBConnection 实现
 DBConnection::DBConnection(const std::string& db_path) 
-    : db_path_(db_path) {
+    : db_path_(db_path)
+    , is_connected_(false) {
     int rc = sqlite3_open(db_path.c_str(), &db_);
     if (rc != SQLITE_OK) {
         std::cerr << "无法打开数据库 " << db_path << ": " << sqlite3_errmsg(db_) << std::endl;

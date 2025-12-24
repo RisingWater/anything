@@ -72,7 +72,8 @@ void FileResultTable::contextMenuEvent(QContextMenuEvent *event)
     menu->deleteLater();
 }
 
-void FileResultTable::setSearchResults(const std::string& keyword, const QList<QVariantMap>& results)
+
+void FileResultTable::setSearchKeyword(const std::string& keyword)
 {
     clearResults();
 
@@ -82,11 +83,12 @@ void FileResultTable::setSearchResults(const std::string& keyword, const QList<Q
     if (nameDelegate_) {
         nameDelegate_->setPattern(keyword_);
     }
-    //if (pathDelegate_) {
-    //    pathDelegate_->setPattern(keyword_);
-    //}
-    
-    setRowCount(results.size());
+}
+
+void FileResultTable::addSearchResults(const QList<QVariantMap>& results)
+{   
+    int old_rowCount = rowCount();
+    setRowCount(old_rowCount + results.size());
     
     for (int i = 0; i < results.size(); ++i) {
         const auto& result = results[i];
@@ -121,10 +123,10 @@ void FileResultTable::setSearchResults(const std::string& keyword, const QList<Q
         sizeItem->setData(Qt::UserRole + 1, isDirectory ? -1 : fileInfo.size());
         timeItem->setData(Qt::UserRole + 1, fileInfo.lastModified());
         
-        setItem(i, 0, nameItem);
-        setItem(i, 1, pathItem);
-        setItem(i, 2, sizeItem);
-        setItem(i, 3, timeItem);
+        setItem(old_rowCount + i, 0, nameItem);
+        setItem(old_rowCount + i, 1, pathItem);
+        setItem(old_rowCount + i, 2, sizeItem);
+        setItem(old_rowCount + i, 3, timeItem);
     }
 }
 

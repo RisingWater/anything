@@ -9,6 +9,31 @@
 #include <chrono>
 #include "DBManager.h"
 
+// 搜索任务状态
+enum class SearchStatus {
+    PENDING,
+    RUNNING,
+    COMPLETED,
+    CANCELLED,
+    ERROR
+};
+
+// 搜索任务结构
+struct SearchTask {
+    std::string task_id;
+    std::string search_term;
+    std::string search_field;
+    int total_results = 0;
+    int limit = 0;                     // 总限制
+    SearchStatus status = SearchStatus::PENDING;
+    std::string pattern;
+    std::chrono::system_clock::time_point created_time;
+    
+    // ID范围相关
+    int current_min_id = 1;            // 当前查询的起始ID
+    int max_id = 0;                    // 最大ID（用于判断结束）
+};
+
 struct FileInfo {
     int id;
     std::string file_path;
@@ -60,6 +85,20 @@ public:
     // 工具函数
     static std::string get_current_time();
 
+    std::string start_search_task(const std::string& search_term,
+                                 const std::string& search_field,
+                                 int& max_file_count,
+                                 int limit = -1);
+
+    SearchStatus get_task_status(const std::string& task_id);
+
+    bool cancel_search_task(const std::string& task_id);
+    
+    void cleanup_task(const std::string& task_id);
+
+    std::vector<FileInfo> get_search_batch(const std::string& task_id, 
+                                          int batch_size = 100000);
+
 private:
     // 批量操作结构
     struct BatchOperation {
@@ -74,6 +113,8 @@ private:
     bool execute_sql_with_params(const std::string& sql, 
                                 const std::vector<std::string>& params);
 
+    int get_max_id();
+
     DBConnection* db_conn_;
     std::string db_path_;
     mutable std::mutex operation_mutex_; // 用于操作级别的线程安全
@@ -82,6 +123,10 @@ private:
     int transaction_depth_ = 0;
 
     std::unordered_map<std::string, sqlite3_stmt*> prepared_statements_;
+
+    std::unordered_map<std::string, std::unique_ptr<SearchTask>> search_tasks_;
+    std::mutex task_mutex_;
+    std::atomic<int> next_task_id_{0};
 };
 
 #endif // FILEDB_H

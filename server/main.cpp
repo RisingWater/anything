@@ -54,6 +54,27 @@ int main() {
         return web_service.audit_event(req);
     });
 
+    // POST /api/filedb/{uid}/task/{search_text} - 创建查找任务，获取task_id
+    CROW_ROUTE(app, "/api/filedb/<string>/task/<string>")
+    .methods("POST"_method)
+    ([&web_service](const std::string& uid, const std::string& search_text) {
+        return web_service.create_search_task(uid, search_text);
+    });
+
+    // GET /api/filedb/{uid}/task/{search_text} - 创建查找任务，获取task_id
+    CROW_ROUTE(app, "/api/filedb/<string>/task/<string>")
+    .methods("GET"_method)
+    ([&web_service](const std::string& uid, const std::string& task_id) {
+        return web_service.get_search_task(uid, task_id);
+    });
+
+    // DELETE /api/filedb/{uid}/task/{search_text} - 创建查找任务，获取task_id
+    CROW_ROUTE(app, "/api/filedb/<string>/task/<string>")
+    .methods("DELETE"_method)
+    ([&web_service](const std::string& uid, const std::string& task_id) {
+        return web_service.delete_search_task(uid, task_id);
+    });
+
     std::cout << "🚀 Web Service 已启动!" << std::endl;
     std::cout << "📍 服务地址: http://localhost:5071" << std::endl;
     
