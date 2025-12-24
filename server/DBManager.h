@@ -25,19 +25,28 @@ public:
         }
     }
 
-    bool is_connected() {
-        return is_connected_;
+    bool is_filedb_inited() {
+        return is_filedb_inited_;
     }
 
-    void set_is_connected(bool is_connected) {
-        is_connected_ = is_connected;
+    bool is_scanobj_inited() {
+        return is_scanobj_inited_;
+    }
+
+    void set_fileinfo_inited(bool inited) {
+        is_filedb_inited_ = inited;
+    }
+
+    void set_scanobj_inited(bool inited) {
+        is_scanobj_inited_ = inited;
     }
 
 private:
     sqlite3* db_;
     std::string db_path_;
     std::atomic<int> ref_count_{0};
-    bool is_connected_;
+    bool is_filedb_inited_ = false;
+    bool is_scanobj_inited_ = false;
 };
 
 class DBManager {

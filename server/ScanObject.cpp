@@ -19,7 +19,7 @@ bool ScanObject::init_database() {
         return false;
     }
 
-    if (db_conn_->is_connected()) {
+    if (db_conn_->is_scanobj_inited()) {
         is_connected_ = true;
         std::cout << "已连接数据库: " << db_path_ << std::endl;
     } else {
@@ -56,7 +56,7 @@ bool ScanObject::init_database() {
             }
         }
 
-        db_conn_->set_is_connected(true);
+        db_conn_->set_scanobj_inited(true);
         
         std::cout << "扫描对象表结构初始化完成" << std::endl;
     }

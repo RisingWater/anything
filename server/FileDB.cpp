@@ -4,6 +4,80 @@
 #include <iomanip>
 #include <algorithm>
 
+
+/**
+ * @brief 获取 UTF-8 字符的字节长度
+ * @param firstByte UTF-8 字符的第一个字节
+ * @return 该字符的总字节数（1-4）
+ */
+int getUTF8CharLength(unsigned char firstByte) {
+    if ((firstByte & 0x80) == 0) {
+        return 1;  // ASCII
+    } else if ((firstByte & 0xE0) == 0xC0) {
+        return 2;  // 2 字节字符
+    } else if ((firstByte & 0xF0) == 0xE0) {
+        return 3;  // 3 字节字符
+    } else if ((firstByte & 0xF8) == 0xF0) {
+        return 4;  // 4 字节字符
+    }
+    return 1;  // 无效 UTF-8，按单字节处理
+}
+
+/**
+ * @brief 更智能的转换函数，处理字面值 % 和 _
+ * 注意：这个函数会稍微改变 SQL 语义，但能在不改动 SQL 语句的情况下工作
+ */
+static std::string convertWithBracketSyntax(const std::string& userPattern) {
+    std::string result;
+    result.reserve(userPattern.size() * 3);
+    
+    size_t i = 0;
+    const size_t len = userPattern.size();
+    
+    while (i < len) {
+        unsigned char firstByte = static_cast<unsigned char>(userPattern[i]);
+
+        int byteCount = getUTF8CharLength(firstByte);
+        
+        if (byteCount == 1) {
+            char c = static_cast<char>(firstByte);
+            
+            if (c == '*') {
+                // 系统通配符 * → %
+                result += '%';
+            }
+            else if (c == '?') {
+                // 系统通配符 ? → _
+                result += '_';
+            }
+            else if (c == '%') {
+                // 字面值 % 转换为能匹配 % 的模式: [%]
+                result += "[%]";
+            }
+            else if (c == '_') {
+                // 字面值 _ 转换为能匹配 _ 的模式: [_]
+                result += "[_]";
+            }
+            else {
+                result += c;
+            }
+            i++;
+        }
+        else {
+            // UTF-8 字符，完整复制
+            int charLen = byteCount;
+            if (i + charLen > len) {
+                charLen = len - i;
+            }
+            
+            result.append(userPattern, i, charLen);
+            i += charLen;
+        }
+    }
+    
+    return result;
+}
+
 FileDB::FileDB(const std::string& db_path) : 
     db_conn_(nullptr), 
     db_path_(db_path), 
@@ -24,7 +98,7 @@ bool FileDB::init_database() {
         return false;
     }
     
-    if (db_conn_->is_connected()) {
+    if (db_conn_->is_filedb_inited()) {
         is_connected_ = true;
         std::cout << "数据库已连接" << std::endl;
     } else {
@@ -77,7 +151,7 @@ bool FileDB::init_database() {
             }
         }
 
-        db_conn_->set_is_connected(true);
+        db_conn_->set_fileinfo_inited(true);
         
         std::cout << "数据库表结构初始化完成" << std::endl;
     }
@@ -591,10 +665,10 @@ std::string FileDB::start_search_task(const std::string& search_term,
     
     auto task = std::make_unique<SearchTask>();
     task->task_id = task_id;
-    task->search_term = search_term;
+    task->search_term = convertWithBracketSyntax(search_term);
     task->search_field = search_field;
     task->limit = limit;  // 总限制，-1表示无限制
-    task->pattern = "%" + search_term + "%";
+    task->pattern = "%" + task->search_term + "%";
     task->created_time = std::chrono::system_clock::now();
     task->status = SearchStatus::PENDING;
     task->total_results = 0;

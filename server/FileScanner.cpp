@@ -21,6 +21,7 @@ FileScanner::FileScanner(const std::string& directory_path,
     file_watcher_(nullptr) {
     
     file_db_ = std::make_unique<FileDB>(db_path_);
+    file_db_->init_database();
     scan_obj_ = std::make_unique<ScanObject>(db_path_);
     
     std::cout << "文件扫描器初始化: " << directory_path_ << std::endl;
