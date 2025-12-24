@@ -103,6 +103,19 @@ void FileSearchApp::setupUI() {
     layout->addLayout(status_layout);
 }
 
+void FileSearchApp::onActivateRequested() {
+    qDebug() << "Activate requested from another instance";
+    // 确保窗口显示
+    if (isHidden()) {
+        show();
+    }
+    
+    // 激活窗口
+    setWindowState((windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
+    activateWindow();
+    raise();
+}
+
 void FileSearchApp::setupMenu() {
     auto menubar = menuBar();
     

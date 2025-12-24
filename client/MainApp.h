@@ -40,6 +40,9 @@ protected:
 signals:
     void refreshSearchResults(QString task_id);
 
+public slots:
+    void onActivateRequested();
+
 private slots:
     void showScanObjDialog();
     void onSearchTextChanged(const QString& text);
