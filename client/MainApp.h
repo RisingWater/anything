@@ -52,6 +52,7 @@ private slots:
     void onFetchBatchFinished(QNetworkReply* reply);
     void cancelCurrentSearch();
     void refreshSearchResultsSlot(QString task_id);
+    void onScanObjectsLoaded(QNetworkReply* reply);
 
 private:
     void setupUI();
@@ -61,6 +62,9 @@ private:
     void setSearchKeyword(const std::string& keyword);
     void addSearchResults(const QList<QVariantMap>& results);
     void processBatchResults(const QJsonArray& files_array);
+
+    void loadScanObjects();
+    void addScanObjectInternal(const QString& path, const QString& desc);
 
     void clearSearchStatus();    
     void showSearchStatus(const QString& task_id, int max_file_count);

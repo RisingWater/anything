@@ -39,6 +39,8 @@ FileSearchApp::FileSearchApp(QWidget* parent) :
 
     currentId_ = 0;
     currentMaxId_ = 0;
+
+    loadScanObjects();
 }
 
 FileSearchApp::~FileSearchApp() {
@@ -483,5 +485,72 @@ void FileSearchApp::onTrayIconActivated(QSystemTrayIcon::ActivationReason reason
         } else {
             hide();
         }
+    }
+}
+
+void FileSearchApp::loadScanObjects()
+{
+    QString uid = QString::number(getuid());
+    QUrl url(QString("%1/api/scan_obj/%2").arg(SERVER_URL).arg(uid));
+    QNetworkRequest request(url);
+    
+    QNetworkReply* reply = networkManager_->get(request);
+
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        onScanObjectsLoaded(reply);
+        reply->deleteLater();
+    });
+}
+
+void FileSearchApp::addScanObjectInternal(const QString& path, const QString& desc)
+{
+    // 准备JSON数据
+    QJsonObject scanObj;
+    scanObj["directory_path"] = path;
+    scanObj["description"] = desc;
+    scanObj["is_active"] = 1;
+    scanObj["is_recursive"] = 1;
+    
+    QJsonDocument doc(scanObj);
+    QByteArray data = doc.toJson();
+    
+    qDebug() << "发送添加请求，数据:" << data;
+    
+    // 发送POST请求
+    QString uid = QString::number(getuid());
+    QUrl url(QString("%1/api/scan_obj/%2").arg(SERVER_URL).arg(uid));
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    
+    QNetworkReply* reply = networkManager_->post(request, data);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+    });
+}
+
+void FileSearchApp::onScanObjectsLoaded(QNetworkReply* reply)
+{
+    if (reply->error() == QNetworkReply::NoError) {
+        QByteArray response_data = reply->readAll();
+        QJsonDocument doc = QJsonDocument::fromJson(response_data);
+        
+        qDebug() << "获取扫描对象响应:" << response_data;
+        
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            QString result = obj["result"].toString();
+            
+            if (result == "ok") {
+               
+                int count = obj["count"].toInt();
+
+                if (count == 0) {
+                    if (QMessageBox::question(this, "提示", "没有扫描目录，是否添加默认目录？", 
+                                            QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
+                        addScanObjectInternal(QDir::homePath(), "主目录");
+                    }
+                }
+            }
+        } 
     }
 }
