@@ -1,0 +1,27 @@
+name: Build and Package
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t anything-build docker/
+
+      - name: Build and package
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/workdir anything-build \
+            /bin/bash -c "mkdir -p /workdir/build && cd /workdir/build && cmake /workdir -G Ninja && ninja package"
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: anything-deb
+          path: build/anything-*.deb
