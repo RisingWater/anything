@@ -44,7 +44,10 @@ private:
     std::unordered_map<ScannerKey, std::unique_ptr<FileScanner>> scanners_;
     mutable std::mutex scanners_mutex_;
     
+    void startScheduledRescan();
+
     std::vector<std::thread> scanner_threads_;
+    std::thread scheduled_rescan_thread_;
     std::atomic<bool> stop_all_{false};
 };
 

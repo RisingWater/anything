@@ -2,6 +2,7 @@
 #include "FileScannerManager.h"
 #include <iostream>
 #include <sstream>
+#include <ctime>
 #include "Utils.h"
 
 FileScannerManager& FileScannerManager::getInstance() {
@@ -11,7 +12,7 @@ FileScannerManager& FileScannerManager::getInstance() {
 
 FileScannerManager::~FileScannerManager() {
     stop_all_ = true;
-    
+
     // 停止所有扫描器
     {
         std::lock_guard<std::mutex> lock(scanners_mutex_);
@@ -22,12 +23,16 @@ FileScannerManager::~FileScannerManager() {
         }
         scanners_.clear();
     }
-    
+
     // 等待所有线程结束
     for (auto& thread : scanner_threads_) {
         if (thread.joinable()) {
             thread.join();
         }
+    }
+
+    if (scheduled_rescan_thread_.joinable()) {
+        scheduled_rescan_thread_.join();
     }
 }
 
@@ -63,6 +68,9 @@ bool FileScannerManager::initializeAllScanners() {
     }
     
     std::cout << "已启动 " << scanner_threads_.size() << " 个文件扫描器" << std::endl;
+
+    startScheduledRescan();
+
     return true;
 }
 
@@ -186,5 +194,74 @@ void FileScannerManager::onFileChange(const std::string& path, const std::string
             }
         }
     }
+}
+
+void FileScannerManager::startScheduledRescan()
+{
+    scheduled_rescan_thread_ = std::thread([this]() {
+        while (!stop_all_) {
+            // 从配置文件读取重扫时间，默认 00:00
+            std::string schedule_time = get_rescan_schedule_time();
+            int target_hour = std::stoi(schedule_time.substr(0, 2));
+            int target_min = std::stoi(schedule_time.substr(3, 2));
+
+            // 计算距离下一个目标时间的秒数
+            auto now = std::chrono::system_clock::now();
+            auto now_time_t = std::chrono::system_clock::to_time_t(now);
+            std::tm now_tm;
+            localtime_r(&now_time_t, &now_tm);
+
+            std::tm target_tm = now_tm;
+            target_tm.tm_hour = target_hour;
+            target_tm.tm_min = target_min;
+            target_tm.tm_sec = 0;
+
+            auto target_time_t = std::mktime(&target_tm);
+            auto target = std::chrono::system_clock::from_time_t(target_time_t);
+
+            // 如果今天的目标时间已过，则改为明天
+            if (target <= now) {
+                target_tm.tm_mday += 1;
+                target_time_t = std::mktime(&target_tm);
+                target = std::chrono::system_clock::from_time_t(target_time_t);
+            }
+
+            auto wait_seconds = std::chrono::duration_cast<std::chrono::seconds>(target - now).count();
+
+            std::cout << "下次定时重扫将在 " << wait_seconds << " 秒后（"
+                      << schedule_time << "）执行" << std::endl;
+
+            // 分段 sleep，以便能响应 stop_all_
+            while (wait_seconds > 0 && !stop_all_) {
+                auto sleep_time = std::min<int64_t>(wait_seconds, 60);
+                std::this_thread::sleep_for(std::chrono::seconds(sleep_time));
+                wait_seconds -= sleep_time;
+            }
+
+            if (stop_all_)
+                break;
+
+            std::cout << "=== 定时重扫开始（" << schedule_time << "） ===" << std::endl;
+
+            // 收集所有扫描器指针
+            std::vector<FileScanner*> scanner_ptrs;
+            {
+                std::lock_guard<std::mutex> lock(scanners_mutex_);
+                for (auto& [key, scanner] : scanners_) {
+                    if (scanner) {
+                        scanner_ptrs.push_back(scanner.get());
+                    }
+                }
+            }
+
+            for (auto* scanner : scanner_ptrs) {
+                if (stop_all_)
+                    break;
+                scanner->scan_directory();
+            }
+
+            std::cout << "=== 定时重扫完成 ===" << std::endl;
+        }
+    });
 }
 

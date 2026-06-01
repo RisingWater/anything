@@ -114,9 +114,9 @@ int main(int argc, char *argv[])
         QFileInfo fi(filePath);
         QString pathType;
         if (eventType == "CREATE") {
-            pathType = fi.isDir() ? "MKDIR" : "CREATE";
+            pathType = fi.isDir() ? "CREATE_DIR" : "CREATE";
         } else if (eventType == "DELETE") {
-            pathType = fi.isDir() ? "RMDIR" : "DELETE";
+            pathType = fi.isDir() ? "DELETE_DIR" : "DELETE";
         }
 
         // 记录解码后的路径
