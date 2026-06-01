@@ -3,3 +3,12 @@
 # 重启 auditd 服务以加载新的 audisp 插件
 echo "Restarting auditd service to load audisp plugin..."
 systemctl restart auditd
+
+# 清除数据库和配置文件
+echo "Removing database and config files..."
+rm -rf /opt/apps/com.anything/files
+
+# 彻底卸载时删除安装目录
+if [ "$1" = "purge" ]; then
+    rm -rf /opt/apps/com.anything
+fi

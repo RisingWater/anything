@@ -1,1 +1,8 @@
 #!/bin/bash
+
+# 安装/升级前删除旧数据库，确保新版本重新扫描
+DB_PATH="/opt/apps/com.anything/files/db"
+if [ -d "$DB_PATH" ]; then
+    echo "Removing old database for clean rescan..."
+    rm -rf "$DB_PATH"
+fi
