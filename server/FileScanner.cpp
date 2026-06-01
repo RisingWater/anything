@@ -338,8 +338,12 @@ bool FileScanner::scan_single_directory(const std::string& directory_path) {
 
 std::unique_ptr<FileInfo> FileScanner::get_file_info(const std::filesystem::path& file_path) {
     try {
-        //获取最后修改时间，来确定下次扫描的时候是否要跳过这个目录
         auto stat = std::filesystem::status(file_path);
+        // 跳过不存在的文件（如死软链接）
+        if (!std::filesystem::exists(stat)) {
+            return nullptr;
+        }
+
         auto modify_time = std::filesystem::last_write_time(file_path);
 
         // 跨编译器的文件时间转换
@@ -372,8 +376,11 @@ std::unique_ptr<FileInfo> FileScanner::get_file_info(const std::filesystem::path
 
 std::unique_ptr<FileInfo> FileScanner::get_directory_info(const std::filesystem::path& dir_path) {
     try {
-        //获取最后修改时间，来确定下次扫描的时候是否要跳过这个目录
         auto stat = std::filesystem::status(dir_path);
+        if (!std::filesystem::exists(stat)) {
+            return nullptr;
+        }
+
         auto modify_time = std::filesystem::last_write_time(dir_path);
 
         // 跨编译器的文件时间转换

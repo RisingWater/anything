@@ -1,8 +1,23 @@
 #!/bin/bash
 
-# 安装/升级前删除旧数据库，确保新版本重新扫描
 DB_PATH="/opt/apps/com.anything/files/db"
+BACKUP_FILE="/opt/apps/com.anything/files/scan_objects_backup"
+
 if [ -d "$DB_PATH" ]; then
+    # 备份所有用户的扫描目录配置
+    echo "Backing up scan objects before database cleanup..."
+    > "$BACKUP_FILE"
+    for uid_dir in "$DB_PATH"/*/; do
+        uid=$(basename "$uid_dir")
+        db_file="$uid_dir/file_db.db"
+        if [ -f "$db_file" ]; then
+            sqlite3 -separator '|' "$db_file" \
+                "SELECT '$uid', directory_path, display_name, description, is_recursive FROM scan_objects;" \
+                >> "$BACKUP_FILE"
+        fi
+    done
+    echo "Scan objects backed up to $BACKUP_FILE"
+
     echo "Removing old database for clean rescan..."
     rm -rf "$DB_PATH"
 fi

@@ -35,13 +35,13 @@ DBManager& DBManager::getInstance() {
 
 DBConnection* DBManager::getConnection(const std::string& db_path) {
     std::lock_guard<std::mutex> lock(mutex_);
-    
+
     auto it = connections_.find(db_path);
     if (it != connections_.end()) {
         it->second->addRef();
         return it->second;
     }
-    
+
     DBConnection* conn = new DBConnection(db_path);
     if (conn->isValid()) {
         conn->addRef(); // 初始引用计数为1
@@ -55,7 +55,7 @@ DBConnection* DBManager::getConnection(const std::string& db_path) {
 
 void DBManager::releaseConnection(DBConnection* conn) {
     if (!conn) return;
-    
+
     std::lock_guard<std::mutex> lock(mutex_);
     conn->release(); // 减少引用计数，如果为0会delete
 }
