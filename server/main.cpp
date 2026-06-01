@@ -57,8 +57,13 @@ int main() {
     // POST /api/filedb/{uid}/task/{search_text} - 创建查找任务，获取task_id
     CROW_ROUTE(app, "/api/filedb/<string>/task/<string>")
     .methods("POST"_method)
-    ([&web_service](const std::string& uid, const std::string& search_text) {
-        return web_service.create_search_task(uid, search_text);
+    ([&web_service](const crow::request& req, const std::string& uid, const std::string& search_text) {
+        bool include_hidden = false;
+        const char* hidden_param = req.url_params.get("include_hidden");
+        if (hidden_param != nullptr) {
+            include_hidden = (std::string(hidden_param) == "1");
+        }
+        return web_service.create_search_task(uid, search_text, include_hidden);
     });
 
     // GET /api/filedb/{uid}/task/{search_text} - 创建查找任务，获取task_id

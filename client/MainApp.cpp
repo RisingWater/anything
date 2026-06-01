@@ -6,6 +6,7 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QProgressBar>
+#include <QCheckBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QStackedLayout>
@@ -71,6 +72,11 @@ void FileSearchApp::setupUI() {
     connect(this, &FileSearchApp::refreshSearchResults, this, &FileSearchApp::refreshSearchResultsSlot);
     
     search_layout->addWidget(search_input_);
+
+    include_hidden_checkbox_ = new QCheckBox("搜索隐藏文件夹", this);
+    include_hidden_checkbox_->setChecked(false);
+    search_layout->addWidget(include_hidden_checkbox_);
+
     search_layout->setContentsMargins(5, 0, 5, 0); // 移除边距
     
     // 搜索结果列表
@@ -178,10 +184,12 @@ void FileSearchApp::performSearch()
         currentSearchText_ = search_text;
         
         // 创建搜索任务
-        QUrl url(QString("%1/api/filedb/%2/task/%3")
+        QString include_hidden = include_hidden_checkbox_->isChecked() ? "1" : "0";
+        QUrl url(QString("%1/api/filedb/%2/task/%3?include_hidden=%4")
                  .arg(SERVER_URL)
                  .arg(uid)
-                 .arg(encoded_search_text));
+                 .arg(encoded_search_text)
+                 .arg(include_hidden));
         
         QNetworkRequest request(url);
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");

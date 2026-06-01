@@ -32,6 +32,7 @@ struct SearchTask {
     // ID范围相关
     int current_min_id = 1;            // 当前查询的起始ID
     int max_id = 0;                    // 最大ID（用于判断结束）
+    bool include_hidden = false;        // 是否包含隐藏文件夹
 };
 
 struct FileInfo {
@@ -88,7 +89,8 @@ public:
     std::string start_search_task(const std::string& search_term,
                                  const std::string& search_field,
                                  int& max_file_count,
-                                 int limit = -1);
+                                 int limit = -1,
+                                 bool include_hidden = false);
 
     SearchStatus get_task_status(const std::string& task_id);
 

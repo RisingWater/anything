@@ -273,7 +273,8 @@ bool FileScanner::scan_single_directory(const std::string& directory_path) {
              std::filesystem::directory_options::skip_permission_denied)) {
             
             try {
-                if (entry.is_regular_file()) {
+                if (entry.is_regular_file() ||
+                    (entry.is_symlink() && !std::filesystem::is_directory(entry.path()))) {
                     auto file_info = get_file_info(entry.path());
                     if (file_info) {
                         file_db_->insert_file(*file_info);
@@ -285,7 +286,7 @@ bool FileScanner::scan_single_directory(const std::string& directory_path) {
                     if (should_exclude_directory(entry.path())) {
                         std::cout << "跳过排除目录:" << entry.path().string() << std::endl;
                         skipped_directories.insert(entry.path().string());  // 记录跳过的目录
-                        
+
                         // 立即删除这个跳过目录及其所有子内容
                         if (file_db_->get_file(entry.path().string())) {
                             file_db_->delete_files_by_path_prefix(entry.path().string());
@@ -532,26 +533,27 @@ void FileScanner::scan_new_directory_recursive(const std::string& directory_path
                 std::filesystem::directory_options::skip_permission_denied)) {
             
             try {
-                if (entry.is_regular_file()) {
+                if (entry.is_regular_file() ||
+                    (entry.is_symlink() && !std::filesystem::is_directory(entry.path()))) {
                     auto file_info = get_file_info(entry.path());
                     if (file_info) {
                         file_db_->insert_file(*file_info);
                     }
                 } else if (entry.is_directory()) {
                     std::string sub_dir_path = entry.path().string();
-                    
+
                     // 检查是否应该排除该目录
                     if (should_exclude_directory(entry.path())) {
                         std::cout << "跳过排除目录:" << sub_dir_path << std::endl;
                         continue;
                     }
-                    
+
                     // 处理子目录
                     auto sub_dir_info = get_directory_info(entry.path());
                     if (sub_dir_info) {
                         file_db_->insert_file(*sub_dir_info);
                     }
-                    
+
                     // 递归扫描子目录
                     scan_new_directory_recursive(sub_dir_path);
                 }

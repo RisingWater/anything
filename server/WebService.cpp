@@ -183,7 +183,8 @@ crow::response WebService::get_filedb_objs(const std::string& uid, const std::st
 }
 
 // POST /api/filedb/{uid}/task/{search_text} - 创建查找任务，获取task_id
-crow::response WebService::create_search_task(const std::string& uid, const std::string& search_text)
+crow::response WebService::create_search_task(const std::string& uid, const std::string& search_text,
+                                              bool include_hidden)
 {
     int max_file_count = 0;
     crow::response res;
@@ -193,8 +194,9 @@ crow::response WebService::create_search_task(const std::string& uid, const std:
     std::string decoded_search_text = UrlDecode(search_text);
     std::cout << "原始搜索文本: " << search_text << std::endl;
     std::cout << "解码后搜索文本: " << decoded_search_text << std::endl;
+    std::cout << "包含隐藏文件夹: " << (include_hidden ? "是" : "否") << std::endl;
 
-    std::string task_id = db_create_search_task(uid, decoded_search_text, max_file_count, error_msg);
+    std::string task_id = db_create_search_task(uid, decoded_search_text, max_file_count, error_msg, include_hidden);
 
     if (!task_id.empty()) {
         crow::json::wvalue response;
@@ -437,10 +439,11 @@ int WebService::db_get_filedb_objs(const std::string& uid, const std::string& se
     return index;
 }
 
-std::string WebService::db_create_search_task(const std::string& uid, 
+std::string WebService::db_create_search_task(const std::string& uid,
     const std::string& decoded_search_text,
     int &max_file_count,
-    std::string &error_msg)
+    std::string &error_msg,
+    bool include_hidden)
 {
     std::shared_ptr<FileDB> filedb = get_db(uid);
     // 初始化数据库
@@ -450,7 +453,7 @@ std::string WebService::db_create_search_task(const std::string& uid,
     }
 
     // 这里应该指定搜索字段，默认为"file_name"
-    return filedb->start_search_task(decoded_search_text, "file_name", max_file_count);
+    return filedb->start_search_task(decoded_search_text, "file_name", max_file_count, -1, include_hidden);
 }
 
 int WebService::db_get_search_task(const std::string& uid,

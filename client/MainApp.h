@@ -8,6 +8,7 @@
 #include <QDialog>
 #include <QList>
 #include <QTimer>
+#include <QCheckBox>
 #include <QProgressBar>
 #include "FileResultTable.h"
 #include <QSystemTrayIcon>
@@ -79,6 +80,7 @@ private:
     QProgressBar* progress_bar_;
     QTimer* search_timer_;
 
+    QCheckBox* include_hidden_checkbox_;
     QSystemTrayIcon* trayIcon_;
     QString currentSearchText_;
     QString currentTaskId_;

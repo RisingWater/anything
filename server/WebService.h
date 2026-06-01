@@ -21,7 +21,8 @@ public:
     crow::response get_filedb_objs(const std::string& uid, const std::string& search_text);
 
     // POST /api/filedb/{uid}/task/{search_text} - 创建查找任务，获取task_id
-    crow::response create_search_task(const std::string& uid, const std::string& search_text);
+    crow::response create_search_task(const std::string& uid, const std::string& search_text,
+                                      bool include_hidden = false);
 
     // GET /api/filedb/{uid}/task/{task_id} - 获取查找任务，获取task_id的一部分查找结果，与查找状态
     crow::response get_search_task(const std::string& uid, const std::string& task_id);
@@ -54,10 +55,11 @@ private:
         crow::json::wvalue& result,
         std::string &error_msg);
 
-    std::string db_create_search_task(const std::string& uid, 
+    std::string db_create_search_task(const std::string& uid,
         const std::string& decoded_search_text,
         int &max_file_count,
-        std::string &error_msg);
+        std::string &error_msg,
+        bool include_hidden = false);
 
     int db_get_search_task(const std::string& uid,
         const std::string& task_id,

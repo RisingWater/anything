@@ -649,25 +649,27 @@ void FileDB::close() {
 std::string FileDB::start_search_task(const std::string& search_term,
                                      const std::string& search_field,
                                      int &max_file_count,
-                                     int limit) {
+                                     int limit,
+                                     bool include_hidden) {
     std::vector<std::string> valid_fields = {
         "file_name", "file_path", "file_extension", "mime_type", "parent_directory"
     };
-    
+
     if (std::find(valid_fields.begin(), valid_fields.end(), search_field) == valid_fields.end()) {
         throw std::invalid_argument("无效的搜索字段: " + search_field);
     }
-    
+
     // 生成唯一任务ID
     std::string task_id = "search_" + std::to_string(next_task_id_);
 
     next_task_id_++;
-    
+
     auto task = std::make_unique<SearchTask>();
     task->task_id = task_id;
     task->search_term = convertWithBracketSyntax(search_term);
     task->search_field = search_field;
     task->limit = limit;  // 总限制，-1表示无限制
+    task->include_hidden = include_hidden;
     task->pattern = "%" + task->search_term + "%";
     task->created_time = std::chrono::system_clock::now();
     task->status = SearchStatus::PENDING;
@@ -750,8 +752,11 @@ std::vector<FileInfo> FileDB::get_search_batch(const std::string& task_id,
         // 构建SQL：按ID范围查询
         std::string sql = "SELECT * FROM file_info WHERE "
                          "id BETWEEN ? AND ? AND "
-                         + task->search_field + " LIKE ? "
-                         "LIMIT ?";
+                         + task->search_field + " LIKE ? ";
+        if (!task->include_hidden) {
+            sql += "AND file_path NOT LIKE '%/.%' ";
+        }
+        sql += "LIMIT ?";
         
         sqlite3_stmt* stmt;
         int rc = sqlite3_prepare_v2(db_conn_->get(), sql.c_str(), -1, &stmt, nullptr);
