@@ -50,14 +50,6 @@ static std::string convertWithBracketSyntax(const std::string& userPattern) {
                 // 系统通配符 ? → _
                 result += '_';
             }
-            else if (c == '%') {
-                // 字面值 % 转换为能匹配 % 的模式: [%]
-                result += "[%]";
-            }
-            else if (c == '_') {
-                // 字面值 _ 转换为能匹配 _ 的模式: [_]
-                result += "[_]";
-            }
             else {
                 result += c;
             }
