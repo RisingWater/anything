@@ -112,6 +112,26 @@ bool FileScanner::should_rescan()
         return true;
     }
 
+    // 检查是否距上次扫描不足24小时（86400秒），避免重复扫描
+    try {
+        std::tm tm = {};
+        std::stringstream ss(scan_object->last_successful_scan_time);
+        ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%S");
+        if (!ss.fail()) {
+            auto last_time_t = std::mktime(&tm);
+            auto last_time = std::chrono::system_clock::from_time_t(last_time_t);
+            auto now = std::chrono::system_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_time).count();
+            if (elapsed < 86400) {
+                std::cout << "距上次扫描不足24小时，跳过重扫: " << directory_path_
+                          << " 已过" << elapsed << "秒" << std::endl;
+                return false;
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "解析扫描时间失败: " << e.what() << std::endl;
+    }
+
     return true;
 }
 
