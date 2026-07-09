@@ -5,6 +5,8 @@
 
 此工程包含一个基于 Qt 的桌面客户端（用于发起搜索、管理扫描目录）和一个运行在后台的服务端组件（负责文件索引、数据库管理与提供 HTTP API）。同时提供一个与 auditd 集成的插件，用于触发增量索引或扫描更新。
 
+[![Build and Package](https://github.com/RisingWater/anything/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/RisingWater/anything/actions/workflows/build.yml)
+
 ## 运行效果
 
 <image src="https://raw.githubusercontent.com/Risingwater/Anything/master/images/sample.png" width="100%" />
